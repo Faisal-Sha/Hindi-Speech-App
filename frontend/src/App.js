@@ -14,7 +14,7 @@ function App() {
   useEffect(() => {
     if ('webkitSpeechRecognition' in window) {
       recognitionRef.current = new window.webkitSpeechRecognition();
-      recognitionRef.current.lang = "hi_IN"; //Hindi
+      recognitionRef.current.lang = "hi-IN"; //Hindi
 
       recognitionRef.current.continuous = true;
       recognitionRef.current.interimResults = true;
@@ -43,12 +43,21 @@ function App() {
       };
         
         recognitionRef.current.onend = () => {
+          console.log("🎤 Recognition ended. isRecording:", isRecording);
+
           if (isRecording) {
+            console.log("🔄 Restarting recognition...");
             setTimeout(() => {
               if (recognitionRef.current && isRecording) {
-                recognitionRef.current.start();
+                try {
+                  recognitionRef.current.start();
+                } catch (error) {
+                  console.log("❌ Failed to restart:", error);
+                }
               }
             }, 100);
+          } else {
+            console.log("✅ Not restarting - recording is stopped");
           }
         }
 
@@ -66,24 +75,38 @@ function App() {
       } else {
         alert("Your browser does not support speech recognition");
       }
-    }, [isRecording, accumulatedText]);
+    }, []);
 
   function startRecording() {
+    console.log("🎬 Starting recording...");
     if (recognitionRef.current) {
       setIsRecording(true);
       setUserResponse("");
       setAccumulatedText("");
+
       recognitionRef.current.start();
     }
 
   }
 
   function stopRecording() {
+    console.log("🛑 Stopping recording...");
     setIsRecording(false);
     if (recognitionRef.current) {
-      recognitionRef.current.abort();
-      recognitionRef.current = null;
-      setUserResponse(accumulatedText.trim());
+      
+      try {
+        // FIXED: Use stop() instead of abort(), and DON'T destroy the object
+        recognitionRef.current.stop();
+        console.log("✅ Recording stopped successfully");
+        
+        // Set final response after a brief delay to ensure state is updated
+        setTimeout(() => {
+          setUserResponse(accumulatedText.trim());
+        }, 100);
+        
+      } catch (error) {
+        console.log("❌ Error stopping recording:", error);
+      }
       
     }
 
