@@ -30,13 +30,10 @@ Install dependencies
 Start the frontend
   npm start
 
-Set up the backend (see Backend Setup section)
 
 Backend Setup
 This app requires a backend server to process AI requests. Create a simple Express.js server:
 
-Create a new directory for backend
-  mkdir hindi-voice-backend
   cd hindi-voice-backend
   npm init -y
 
@@ -55,51 +52,6 @@ Speak Naturally: Talk in Hindi - take pauses, think between sentences
 Stop Recording: Click "🔴 Stop Recording" when finished
 Send to AI: Click "📤 Send to AI" to get a response
 Listen to Response: The AI response will be spoken back to you
-
-🛠️ Technical Details
-Speech Recognition Features
-
-Continuous Mode: Uses continuous: true to keep listening
-Interim Results: Shows real-time transcription with interimResults: true
-Auto-restart: Automatically restarts if recognition stops unexpectedly
-Error Handling: Gracefully handles network issues and silence detection
-
-Browser Compatibility
-BrowserSupportNotesChrome✅ FullRecommended browserEdge✅ FullWorks wellSafari⚠️ LimitedBasic functionalityFirefox❌ NoWeb Speech API not supported
-🔧 Configuration
-Changing Language Settings
-To modify speech recognition language, update these lines in App.js:
-javascript// For speech recognition input
-recognitionRef.current.lang = "hi-IN"; // Hindi (India)
-
-// For text-to-speech output  
-utterance.lang = "hi-IN";
-Adjusting Speech Rate
-Modify the speech rate for AI responses:
-javascriptutterance.rate = 0.8; // Slower: 0.1-1.0, Faster: 1.0-2.0
-🐛 Troubleshooting
-Common Issues
-"Your browser does not support speech recognition"
-
-Use Chrome or Edge browser
-Ensure you're on HTTPS (required for microphone access)
-
-Recording stops during pauses
-
-This is fixed in the current version with continuous recording
-Ensure you're using the latest code
-
-No AI responses
-
-Check that backend server is running on port 3001
-Verify the /chat endpoint is working
-Check browser console for errors
-
-Microphone not working
-
-Grant microphone permissions when prompted
-Check system microphone settings
-Ensure no other apps are using the microphone
 
 
 Made with ❤️ for the Hindi-speaking community.
