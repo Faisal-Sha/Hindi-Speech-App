@@ -1,5 +1,7 @@
 Hindi Voice Assistant 🎤
+
 हिंदी वॉयस असिस्टेंट
+
 A React-based voice assistant application designed for Hindi speakers. Built for my grandmother and anyone who prefers speaking in Hindi over typing.
 
 ✨ Features
