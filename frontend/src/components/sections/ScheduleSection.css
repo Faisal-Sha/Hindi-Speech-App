@@ -1,0 +1,67 @@
+.schedule-section {
+    color: white;
+    padding: 20px;
+  }
+  
+  .schedule-section-title {
+    text-align: center;
+    margin-bottom: 25px;
+    color: #252425;
+    font-size: 24px;
+  }
+  
+  .schedule-event {
+    padding: 15px;
+    margin: 10px 0;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    border-left: 4px solid #d6a3b9;
+    transition: all 0.3s ease;
+  }
+  
+  .schedule-event:hover {
+    background: rgba(248, 3, 109, 0.15);
+    transform: translateX(5px);
+  }
+  
+  .schedule-event-title {
+    font-weight: bold;
+    font-size: 16px;
+    margin-bottom: 8px;
+    color: #dcc7d0;
+    display: flex;
+    align-items: center;
+  }
+  
+  .schedule-event-time {
+    font-size: 14px;
+    opacity: 0.8;
+    margin-bottom: 5px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  
+  .schedule-event-location {
+    font-size: 14px;
+    opacity: 0.8;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  
+  .schedule-event-icon {
+    margin-right: 8px;
+  }
+  
+  .empty-schedule-message {
+    text-align: center;
+    padding: 20px;
+    opacity: 0.7;
+    font-style: italic;
+  }
+
+  @media (max-width: 768px) {
+    .schedule-event { padding: 12px; margin: 8px 0; }
+    .schedule-event-title { font-size: 14px; }
+  }

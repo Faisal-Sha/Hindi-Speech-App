@@ -1,4 +1,35 @@
 
+:root {
+  /* Your existing colors */
+  --primary-green: #74c42e;
+  --secondary-pink: #f8036d;
+  --accent-orange: #faa046;
+  --user-message: #68001d;
+  --ai-message: #005014;
+  --status-bg: #917c71;
+  
+  /* Responsive breakpoints */
+  --mobile: 480px;
+  --tablet: 768px;
+  --desktop: 1024px;
+  
+  /* Spacing */
+  --spacing-xs: 8px;
+  --spacing-sm: 12px;
+  --spacing-md: 15px;
+  --spacing-lg: 20px;
+  
+  /* Border radius */
+  --radius-sm: 8px;
+  --radius-md: 15px;
+  --radius-lg: 20px;
+  
+  /* Transitions */
+  --transition-fast: 0.2s ease;
+  --transition-normal: 0.3s ease;
+  --transition-slow: 0.5s ease;
+}
+
 .App {
   max-width: 800px;
   margin: 0 auto;
@@ -228,4 +259,315 @@ body {
 
 .messages-container::-webkit-scrollbar {
   width: 20px;
+}
+
+/* Tablet and Small Desktop */
+@media (max-width: 1024px) {
+  .app {
+    max-width: 95%;
+    padding: 15px;
+  }
+  
+  .header h1 {
+    font-size: 32px;
+  }
+  
+  .header h2 {
+    font-size: 24px;
+  }
+}
+
+/* Mobile and Small Tablets */
+@media (max-width: 768px) {
+  .app {
+    padding: 10px;
+    max-width: 100%;
+  }
+  
+  /* Header responsive */
+  .header {
+    padding: 15px;
+  }
+  
+  .header h1 {
+    font-size: 28px;
+  }
+  
+  .header h2 {
+    font-size: 20px;
+  }
+  
+  .header p {
+    font-size: 16px;
+  }
+  
+  /* Status section responsive */
+  .status-section {
+    padding: 15px;
+  }
+  
+  .status-item {
+    font-size: 16px;
+    padding: 8px;
+    flex-direction: column;
+    text-align: center;
+  }
+  
+  /* Message container responsive */
+  .message-container {
+    padding: 15px;
+    max-height: 400px;
+  }
+  
+  .message {
+    font-size: 16px !important; /* Override your existing large font-size */
+    padding: 12px;
+    max-width: 95%;
+  }
+  
+  .message.user {
+    font-size: 16px !important; /* Your original had font-size: 30px */
+  }
+  
+  /* Controls responsive */
+  .controls {
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+  }
+  
+  .btn {
+    min-width: 200px;
+    padding: 15px 20px; /* Larger touch targets */
+    font-size: 16px;
+  }
+  
+  /* No-messages responsive */
+  .no-messages {
+    padding: 30px 15px;
+    font-size: 16px;
+  }
+}
+
+/* Small Mobile Phones */
+@media (max-width: 480px) {
+  .app {
+    padding: 8px;
+  }
+  
+  .header {
+    padding: 12px;
+  }
+  
+  .header h1 {
+    font-size: 24px;
+  }
+  
+  .header h2 {
+    font-size: 18px;
+  }
+  
+  .status-section {
+    padding: 12px;
+  }
+  
+  .message-container {
+    padding: 12px;
+  }
+  
+  .btn {
+    min-width: 180px;
+    padding: 12px 16px;
+    font-size: 14px;
+  }
+}
+
+.status-item.status-error {
+  background: rgba(255, 68, 68, 0.3);
+  border: 2px solid #ff4444;
+  color: #ff4444;
+  font-weight: bold;
+}
+
+.status-item.recording-active {
+  background: #fff5f5;
+  border-left-color: #ff4757;
+  animation: pulse 1.5s infinite;
+}
+
+/* Enhanced Controls - Building on your existing .controls if it exists */
+.controls {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  align-items: center;
+}
+
+.controls-row {
+  display: flex;
+  gap: 15px;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.controls-row.secondary {
+  opacity: 0.8;
+  font-size: 14px;
+}
+
+/* Enhanced Buttons - Keep your color scheme */
+.btn {
+  padding: 15px 25px;
+  border: 2px solid transparent;
+  border-radius: 25px;
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 600;
+  transition: all 0.3s ease;
+  min-width: 160px;
+  text-align: center;
+  color: white;
+  font-family: 'Times New Roman', Times, serif; /* Match your body font */
+}
+
+.btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* Use your existing color scheme */
+.btn-record {
+  background: linear-gradient(135deg, var(--primary-green, #74c42e), #035115);
+  border-color: var(--primary-green, #74c42e);
+}
+
+.btn-record.recording {
+  background: linear-gradient(135deg, #ff4444, var(--user-message, #68001d));
+  border-color: #ff4444;
+  animation: pulse 1s infinite;
+}
+
+.btn-record:hover:not(:disabled) {
+  background: linear-gradient(135deg, #85d53f, #046620);
+  box-shadow: 0 4px 15px rgba(116, 196, 46, 0.4);
+}
+
+.btn-send {
+  background: linear-gradient(135deg, var(--accent-orange, #faa046), #d18a2a);
+  border-color: var(--accent-orange, #faa046);
+}
+
+.btn-send:hover:not(:disabled) {
+  background: linear-gradient(135deg, #fbb366, #e19840);
+  box-shadow: 0 4px 15px rgba(250, 160, 70, 0.4);
+}
+
+.btn-send:disabled {
+  background: rgba(100, 100, 100, 0.5);
+  border-color: rgba(100, 100, 100, 0.5);
+}
+
+.btn-clear {
+  background: linear-gradient(135deg, var(--secondary-pink, #f8036d), #d1035b);
+  border-color: var(--secondary-pink, #f8036d);
+  min-width: 120px;
+  padding: 10px 20px;
+  font-size: 14px;
+}
+
+.btn-clear:hover:not(:disabled) {
+  background: linear-gradient(135deg, #f9237a, #e60c70);
+  box-shadow: 0 4px 15px rgba(248, 3, 109, 0.4);
+}
+
+/* Text Preview */
+.text-preview {
+  background: rgba(145, 124, 113, 0.8); /* Use your status-bg color */
+  padding: 10px 15px;
+  border-radius: 10px;
+  color: white;
+  font-size: 14px;
+  max-width: 300px;
+  word-wrap: break-word;
+  text-align: center;
+  font-family: 'Times New Roman', Times, serif;
+}
+
+.text-preview strong {
+  color: var(--primary-green, #74c42e);
+  display: block;
+  margin-bottom: 5px;
+}
+
+/* Loading States */
+.loading-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.loading-spinner {
+  width: 50px;
+  height: 50px;
+  border: 5px solid rgba(255, 255, 255, 0.3);
+  border-top: 5px solid var(--primary-green, #74c42e);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Responsive Design Enhancements - Building on your existing responsive styles */
+@media (max-width: 768px) {
+  .controls {
+    padding: 15px 10px;
+  }
+  
+  .controls-row {
+    flex-direction: column;
+    width: 100%;
+  }
+  
+  .btn {
+    min-width: 200px;
+    font-size: 14px;
+    padding: 12px 20px;
+  }
+  
+  .text-preview {
+    max-width: 250px;
+    font-size: 13px;
+  }
+}
+
+@media (max-width: 480px) {
+  .btn {
+    min-width: 180px;
+    font-size: 13px;
+    padding: 10px 16px;
+  }
+  
+  .text-preview {
+    max-width: 200px;
+    font-size: 12px;
+    padding: 8px 12px;
+  }
 }

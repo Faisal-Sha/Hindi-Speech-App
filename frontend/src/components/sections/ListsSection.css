@@ -1,0 +1,72 @@
+.lists-section {
+    color: white;
+    padding: 20px;
+  }
+  
+  .lists-section-title {
+    text-align: center;
+    margin-bottom: 25px;
+    color: #22141d;
+    font-size: 24px;
+  }
+  
+  .list-item {
+    padding: 12px;
+    margin: 8px 0;
+    border-radius: 8px;
+    border-left: 4px solid #e8bfd8;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    transition: all 0.3s ease;
+  }
+  
+  .list-item.completed {
+    background: rgba(209, 105, 169, 0.2);
+  }
+  
+  .list-item.pending {
+    background: rgba(255, 255, 255, 0.1);
+  }
+  
+  .list-item:hover {
+    background: rgba(182, 90, 145, 0.15);
+    transform: translateX(5px);
+  }
+  
+  .list-item-content {
+    flex-grow: 1;
+  }
+  
+  .list-item-text {
+    font-weight: bold;
+    margin-bottom: 4px;
+  }
+  
+  .list-item-text.completed {
+    text-decoration: line-through;
+    opacity: 0.7;
+  }
+  
+  .list-item-meta {
+    font-size: 12px;
+    opacity: 0.7;
+    margin-top: 4px;
+  }
+  
+  .list-item-icon {
+    font-size: 18px;
+    margin-right: 10px;
+  }
+  
+  .empty-list-message {
+    text-align: center;
+    padding: 20px;
+    opacity: 0.7;
+    font-style: italic;
+  }
+
+  @media (max-width: 768px) {
+    .list-item { padding: 10px; margin: 5px 0; }
+    .list-item-text { font-size: 14px; }
+  }

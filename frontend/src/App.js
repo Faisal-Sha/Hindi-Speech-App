@@ -1,231 +1,238 @@
 import './App.css';
-import React, {useState, useRef, useEffect} from "react";
+import React, { useState, useEffect } from "react";
 
+// Import section components
+import Header from './components/Header';
+import ModeNavigation from './components/ModeNavigation';
+import StatusSection from './components/StatusSection';
+import ContentArea from './components/ContentArea';
+import Controls from './components/Controls';
+
+// Import custom hooks for logic separation
+import useSpeechRecognition from './hooks/useSpeechRecognition';
+import useAIIntegration from './hooks/useAIIntegration';
+import useDataManagement from './hooks/useDataManagement';
 
 function App() {
-  const [isRecording, setIsRecording]  = useState(false);
-  const [userResponse, setUserResponse] = useState("");
-  const [aiResponse, setAiResponse] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const [messages, setMessages] = useState([]);
-  const recognitionRef = useRef(null);
-  const [accumulatedText, setAccumulatedText] = useState("");
+  // Core UI state (minimal - most logic moved to hooks)
+  const [currentMode, setCurrentMode] = useState('chat');
+  const [language, setLanguage] = useState('hi-IN');
+  const [backendStatus, setBackendStatus] = useState('checking'); // 'checking', 'connected', 'disconnected'
 
+  // Custom hooks handle complex logic cleanly
+  const {
+    isRecording,
+    userResponse, 
+    startRecording,
+    stopRecording,
+    accumulatedText,
+    clearText
+  } = useSpeechRecognition(language);
+
+  const {
+    isLoading: isAILoading,
+    sendToAI,
+    messages,
+    error: aiError,
+    clearMessages
+  } = useAIIntegration(accumulatedText, userResponse, currentMode, language);
+
+  const {
+    userLists,
+    userSchedules, 
+    userMemory,
+    userChats,
+    handleAiActions,
+    isLoading: isDataLoading,
+    loadUserData
+  } = useDataManagement(messages);
+
+  // Check backend health on startup
   useEffect(() => {
-    if ('webkitSpeechRecognition' in window) {
-      recognitionRef.current = new window.webkitSpeechRecognition();
-      recognitionRef.current.lang = "hi-IN"; //Hindi
+    checkBackendHealth();
+  }, []);
 
-      recognitionRef.current.continuous = true;
-      recognitionRef.current.interimResults = true;
-      recognitionRef.current.maxAlternatives = 1;
-
-      //if it hears something
-      recognitionRef.current.onresult = (event) => {
-        let finalTranscript = "";
-        let interimTranscript = "";
-
-        //process all results
-        for (let i = 0; i < event.results.length; i++) {
-          const transcript = event.results[i][0].transcript;
-          if (event.results[i].isFinal) {
-            finalTranscript += transcript + " ";
-          } else {
-            interimTranscript += transcript;
-          }
-        }
-
-        setAccumulatedText(finalTranscript);
-
-        setUserResponse(finalTranscript + interimTranscript);
-        
-        
-      };
-        
-        recognitionRef.current.onend = () => {
-          console.log("🎤 Recognition ended. isRecording:", isRecording);
-
-          if (isRecording) {
-            console.log("🔄 Restarting recognition...");
-            setTimeout(() => {
-              if (recognitionRef.current && isRecording) {
-                try {
-                  recognitionRef.current.start();
-                } catch (error) {
-                  console.log("❌ Failed to restart:", error);
-                }
-              }
-            }, 100);
-          } else {
-            console.log("✅ Not restarting - recording is stopped");
-          }
-        }
-
-        recognitionRef.current.onerror = (event) => {
-          console.log('Speech recognition error:', event.error);
-          if (event.error === 'no-speech' && isRecording) {
-            setTimeout(() => {
-              if (recognitionRef.current && isRecording) {
-                recognitionRef.current.start();
-              }
-            }, 100);
-          }
-        }
-
-      } else {
-        alert("Your browser does not support speech recognition");
-      }
-    }, []);
-
-  function startRecording() {
-    console.log("🎬 Starting recording...");
-    if (recognitionRef.current) {
-      setIsRecording(true);
-      setUserResponse("");
-      setAccumulatedText("");
-
-      recognitionRef.current.start();
-    }
-
-  }
-
-  function stopRecording() {
-    console.log("🛑 Stopping recording...");
-    setIsRecording(false);
-    if (recognitionRef.current) {
-      
-      try {
-        // FIXED: Use stop() instead of abort(), and DON'T destroy the object
-        recognitionRef.current.stop();
-        console.log("✅ Recording stopped successfully");
-        
-        // Set final response after a brief delay to ensure state is updated
-        setTimeout(() => {
-          setUserResponse(accumulatedText.trim());
-        }, 100);
-        
-      } catch (error) {
-        console.log("❌ Error stopping recording:", error);
-      }
-      
-    }
-
-  }
-
-  function speakText(text) {
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = "hi-IN";
-    utterance.rate = 0.8;
-    window.speechSynthesis.speak(utterance);
-  }
-
-  async function sendToAi() {
-    const finalText = accumulatedText.trim() || userResponse.trim();
-    if (finalText === "") return;
-    const userMessage = {
-      type: "user", 
-      text: finalText,
-      timestamp: new Date()
-    }
-
-    setMessages(prev => [...prev, userMessage]);
-
-    setIsLoading(true);
+  const checkBackendHealth = async () => {
     try {
-      const response = await fetch("http://localhost:3001/chat", {
-        method: 'POST',
-        headers:{ 'Content-Type': 'application/json' }, 
-        body: JSON.stringify({ message: finalText })
-      })
+      console.log('🔍 Checking backend health...');
+      const response = await fetch('http://localhost:3001/health');
       
-      const data = await response.json();
-      setAiResponse(data.response);
-
-      const aiMessage = {
-        type: "ai",
-        text: data.response,
-        timestamp: new Date()
+      if (response.ok) {
+        const health = await response.json();
+        console.log('✅ Backend is healthy:', health);
+        setBackendStatus('connected');
+      } else {
+        throw new Error('Backend responded with error');
       }
+    } catch (error) {
+      console.error('❌ Backend health check failed:', error);
+      setBackendStatus('disconnected');
+    }
+  };
 
-      setMessages(prev => [...prev, aiMessage]);
+  // Enhanced sendToAI that handles AI actions and provides context
+  const handleSendToAI = async () => {
+    if (!userResponse.trim() && !accumulatedText.trim()) {
+      console.log('⚠️ No speech input to send');
+      return;
+    }
 
-      speakText(data.response);
+    if (backendStatus !== 'connected') {
+      console.log('⚠️ Backend not connected, attempting to reconnect...');
+      await checkBackendHealth();
+      if (backendStatus !== 'connected') {
+        alert('❌ Backend server is not available. Please make sure it\'s running on http://localhost:3001');
+        return;
+      }
+    }
 
+    try {
+      // Prepare context data for AI
+      const contextData = {
+        lists: userLists,
+        schedules: userSchedules,
+        memory: userMemory,
+        chats: userChats,
+        currentMode: currentMode,
+        language: language
+      };
+
+      console.log('📤 Sending to AI with context:', {
+        mode: currentMode,
+        listsCount: Object.keys(userLists).length,
+        schedulesCount: Object.keys(userSchedules).length,
+        memoryCount: Object.keys(userMemory).length
+      });
+
+      // Send to AI and get back any actions
+      const actions = await sendToAI(contextData);
+
+      clearText();
+      
+      // Process any actions returned by AI
+      if (actions && actions.length > 0) {
+        console.log('🎬 Processing AI actions:', actions);
+        await handleAiActions(actions);
+      }
       
     } catch (error) {
-      
-      console.log(error);
-      alert("Error connecting to AI. Please try again.");
-      
-
+      console.error('❌ Error in handleSendToAI:', error);
     }
+  };
 
-    setIsLoading(false);
-    setUserResponse("");
-    setAccumulatedText("");
-  }
+  // Handle mode changes
+  const handleModeChange = (newMode) => {
+    console.log(`🔄 Switching to ${newMode} mode`);
+    setCurrentMode(newMode);
+  };
+
+  // Handle language changes
+  const handleLanguageChange = (newLanguage) => {
+    console.log(`🌍 Switching to ${newLanguage} language`);
+    setLanguage(newLanguage);
+  };
+
+  // Loading state
+  const isLoading = isAILoading || isDataLoading;
 
   return (
-      <div className = "app" >
-
-        {/*Header section*/}
-        <div className = "header" >
-          <h1>Hindi Voice Assistant</h1>
-          <h2>हिंदी वॉयस असिस्टेंट</h2>
-          <p>Talk to me in Hindi!</p>
+    <div className="app">
+      {/* Backend Status Indicator */}
+      {backendStatus === 'disconnected' && (
+        <div style={{
+          background: '#ff4444',
+          color: 'white',
+          padding: '10px',
+          textAlign: 'center',
+          fontSize: '14px'
+        }}>
+          ⚠️ Backend server disconnected. Please start the server on localhost:3001
+          <button 
+            onClick={checkBackendHealth}
+            style={{ marginLeft: '10px', padding: '5px 10px' }}
+          >
+            Retry Connection
+          </button>
         </div>
-        
-        {/*Status section*/}
-        <div className = "status-section">
-          <div className = {`status-item ${isRecording? "recording-active": ""}`}>
-            <span className="status-label">Recording Status: </span>
-              <span className = "status-value">{isRecording? " 🔴 Recording..." : " ⚪ Ready to listen"}</span>
-          </div>
+      )}
 
-          <div className= "status-item">
-            <span className="status-label">You said: </span>
-              <span className="status-value">{userResponse || " Nothing yet"} </span>
-          </div>
-
+      {backendStatus === 'checking' && (
+        <div style={{
+          background: '#ffa500',
+          color: 'white',
+          padding: '10px',
+          textAlign: 'center',
+          fontSize: '14px'
+        }}>
+          🔍 Checking backend connection...
         </div>
-        
+      )}
 
-        {/*chat history*/}
-        <div className = "message-container">
-          {(messages.length === 0) ? (
-            <div className = "no-messages">
-              <p>💬 Your conversation will appear here...</p>
-              <p>आपकी बातचीत यहाँ दिखाई देगी...</p>
-            </div>
-            ) : (
-            messages.map((msg, index) => (
-              <div key = {index} className={`message ${msg.type}`}>
-                <div className = "message-sender">
-                  {msg.type === "user" ? "👤 You" : "🤖 AI Assistant"}
-                </div>
-                <div className = "message-text">{msg.text}</div>
-              </div>
-            )
-            )
-          )}
+      <Header 
+        language={language}
+        onLanguageChange={handleLanguageChange}
+      />
+      
+      <ModeNavigation 
+        currentMode={currentMode}
+        onModeChange={handleModeChange}
+      />
+      
+      <StatusSection 
+        isRecording={isRecording}
+        userResponse={userResponse}
+        currentMode={currentMode}
+        backendStatus={backendStatus}
+        error={aiError}
+      />
+      
+      <ContentArea 
+        currentMode={currentMode}
+        messages={messages}
+        userLists={userLists}
+        userSchedules={userSchedules}
+        userMemory={userMemory}
+        userChats={userChats}
+        isLoading={isDataLoading}
+      />
+      
+      <Controls 
+        isRecording={isRecording}
+        isLoading={isLoading}
+        userResponse={userResponse}
+        accumulatedText={accumulatedText}
+        onStartRecording={startRecording}
+        onStopRecording={stopRecording}
+        onSendToAI={handleSendToAI}
+        onClearMessages={clearMessages}
+        backendStatus={backendStatus}
+      />
+
+      {/* Debug Panel (only in development) */}
+      {process.env.NODE_ENV === 'development' && (
+        <div style={{
+          position: 'fixed',
+          bottom: '10px',
+          right: '10px',
+          background: 'rgba(0,0,0,0.8)',
+          color: 'white',
+          padding: '10px',
+          borderRadius: '8px',
+          fontSize: '12px',
+          maxWidth: '300px'
+        }}>
+          <div><strong>Debug Info:</strong></div>
+          <div>Backend: {backendStatus}</div>
+          <div>Mode: {currentMode}</div>
+          <div>Lists: {Object.keys(userLists).length}</div>
+          <div>Schedules: {Object.keys(userSchedules).length}</div>
+          <div>Memory: {Object.keys(userMemory).length}</div>
+          <div>Messages: {messages.length}</div>
+          <div>Recording: {isRecording ? 'Yes' : 'No'}</div>
+          <div>Loading: {isLoading ? 'Yes' : 'No'}</div>
         </div>
-        
-        {/*Control buttons*/}
-        <div className = "controls">
-          <button className = "btn btn-record" onClick = {isRecording ? stopRecording : startRecording}>
-            {isRecording?  "🔴 Stop" : "🎤 Start Recording" }</button>
-          <button className = "btn btn-send"onClick = {sendToAi} disabled={userResponse === "" || isLoading}> {isLoading ? "⏳ Sending..." : "📤 Send to AI"}</button>
-        </div>
-
-        
-
-
-        
-      </div>
-
-
-
-    
+      )}
+    </div>
   );
 }
 
