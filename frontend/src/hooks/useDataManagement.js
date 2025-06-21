@@ -34,7 +34,7 @@ const useDataManagement = (messages) => {
     }));
   }, [messages]);
 
-  // Load data from backend (unchanged)
+  // **FIXED: Load data from backend with better error handling**
   const loadUserData = async () => {
     try {
       setIsLoading(true);
@@ -42,12 +42,22 @@ const useDataManagement = (messages) => {
       
       const response = await fetch(`${API_BASE}/data/${userId}`);
       if (!response.ok) {
-        throw new Error('Failed to load data');
+        if (response.status === 404) {
+          console.log('👤 User not found, will be created on first save');
+          return;
+        }
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
       
       const data = await response.json();
-      console.log('✅ Loaded data:', data);
+      console.log('✅ Loaded data from backend:', {
+        lists: Object.keys(data.lists || {}).length,
+        schedules: Object.keys(data.schedules || {}).length,
+        memory: Object.keys(data.memory || {}).length,
+        chats: Object.keys(data.chats || {}).length
+      });
       
+      // Update state with backend data
       setUserLists(data.lists || {});
       setUserSchedules(data.schedules || {});
       setUserMemory(data.memory || {});
@@ -58,15 +68,16 @@ const useDataManagement = (messages) => {
       
     } catch (error) {
       console.error('❌ Error loading data:', error);
+      // Keep default empty state if loading fails
     } finally {
       setIsLoading(false);
     }
   };
 
-  // **NEW: Save entire object (only for new creations)**
-  const saveCompleteItem = async (dataType, itemId, itemData) => {
+  // **FIXED: Save data to backend with proper error handling**
+  const saveToBackend = async (dataType, dataKey, dataValue) => {
     try {
-      console.log(`💾 Saving complete ${dataType}/${itemId}...`);
+      console.log(`💾 Saving ${dataType}/${dataKey} to backend...`);
       
       const response = await fetch(`${API_BASE}/save-data`, {
         method: 'POST',
@@ -74,73 +85,89 @@ const useDataManagement = (messages) => {
         body: JSON.stringify({
           userId,
           dataType,
-          dataKey: itemId,
-          dataValue: itemData
+          dataKey,
+          dataValue
         })
       });
       
-      if (!response.ok) throw new Error('Failed to save complete item');
-      console.log(`✅ Saved complete ${dataType}/${itemId}`);
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`HTTP ${response.status}: ${errorText}`);
+      }
+      
+      const result = await response.json();
+      console.log(`✅ Saved ${dataType}/${dataKey} successfully:`, result);
       return true;
     } catch (error) {
-      console.error('❌ Error saving complete item:', error);
-      return false;
-    }
-  };
-
-  // **NEW: Add single item only (much more efficient)**
-  const addSingleItem = async (dataType, parentId, newItem) => {
-    try {
-      console.log(`➕ Adding single item to ${dataType}/${parentId}:`, newItem);
-      
-      const response = await fetch(`${API_BASE}/add-item`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId,
-          dataType,
-          parentId,
-          newItem
-        })
-      });
-      
-      if (!response.ok) throw new Error('Failed to add single item');
-      console.log(`✅ Added single item to ${dataType}/${parentId}`);
-      return true;
-    } catch (error) {
-      console.error('❌ Error adding single item:', error);
-      return false;
-    }
-  };
-
-  // **NEW: Update metadata only (timestamps, counts)**
-  const updateMetadata = async (dataType, itemId, metadata) => {
-    try {
-      console.log(`🔄 Updating metadata for ${dataType}/${itemId}`);
-      
-      const response = await fetch(`${API_BASE}/update-metadata`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId,
-          dataType,
-          itemId,
-          metadata
-        })
-      });
-      
-      if (!response.ok) throw new Error('Failed to update metadata');
-      console.log(`✅ Updated metadata for ${dataType}/${itemId}`);
-      return true;
-    } catch (error) {
-      console.error('❌ Error updating metadata:', error);
+      console.error(`❌ Error saving ${dataType}/${dataKey}:`, error);
       return false;
     }
   };
 
   const generateId = () => Date.now().toString();
 
-  // **OPTIMIZED: Create new list (save complete object once)**
+  // **HELPER: Find list by name (case-insensitive, fuzzy matching)**
+  const findListByName = (searchName) => {
+    if (!searchName) return null;
+    
+    const normalizedSearch = searchName.toLowerCase().trim();
+    
+    // First try exact match
+    for (const [id, list] of Object.entries(userLists)) {
+      if (list.title.toLowerCase() === normalizedSearch) {
+        console.log(`🎯 Found exact list match: "${list.title}" (${id})`);
+        return { id, list };
+      }
+    }
+    
+    // Then try partial match
+    for (const [id, list] of Object.entries(userLists)) {
+      if (list.title.toLowerCase().includes(normalizedSearch) || 
+          normalizedSearch.includes(list.title.toLowerCase())) {
+        console.log(`🎯 Found partial list match: "${list.title}" (${id})`);
+        return { id, list };
+      }
+    }
+    
+    console.log(`❌ No list found matching: "${searchName}"`);
+    return null;
+  };
+
+  // **HELPER: Find schedule by name**
+  const findScheduleByName = (searchName) => {
+    if (!searchName) return null;
+    
+    const normalizedSearch = searchName.toLowerCase().trim();
+    
+    for (const [id, schedule] of Object.entries(userSchedules)) {
+      if (schedule.title.toLowerCase().includes(normalizedSearch) || 
+          normalizedSearch.includes(schedule.title.toLowerCase())) {
+        console.log(`🎯 Found schedule match: "${schedule.title}" (${id})`);
+        return { id, schedule };
+      }
+    }
+    
+    return null;
+  };
+
+  // **HELPER: Find memory by name**
+  const findMemoryByName = (searchName) => {
+    if (!searchName) return null;
+    
+    const normalizedSearch = searchName.toLowerCase().trim();
+    
+    for (const [id, memory] of Object.entries(userMemory)) {
+      if (memory.title.toLowerCase().includes(normalizedSearch) || 
+          normalizedSearch.includes(memory.title.toLowerCase())) {
+        console.log(`🎯 Found memory match: "${memory.title}" (${id})`);
+        return { id, memory };
+      }
+    }
+    
+    return null;
+  };
+
+  // Create functions (unchanged but with better logging)
   const createNewList = async (listName) => {
     const listId = generateId();
     const newList = {
@@ -150,7 +177,7 @@ const useDataManagement = (messages) => {
       lastUpdated: new Date()
     };
     
-    console.log(`📝 Creating new list: ${listName}`);
+    console.log(`📝 Creating new list: "${listName}" with ID: ${listId}`);
     
     // Update local state immediately
     setUserLists(prev => ({
@@ -158,12 +185,15 @@ const useDataManagement = (messages) => {
       [listId]: newList
     }));
     
-    // Save complete new list to backend (only time we save the whole thing)
-    await saveCompleteItem('lists', listId, newList);
+    // Save to backend
+    const saved = await saveToBackend('lists', listId, newList);
+    if (!saved) {
+      console.error(`❌ Failed to save list "${listName}" to backend`);
+    }
+    
     return listId;
   };
 
-  // **OPTIMIZED: Create new schedule**
   const createNewSchedule = async (scheduleName) => {
     const scheduleId = generateId();
     const newSchedule = {
@@ -173,18 +203,17 @@ const useDataManagement = (messages) => {
       lastUpdated: new Date()
     };
     
-    console.log(`📅 Creating new schedule: ${scheduleName}`);
+    console.log(`📅 Creating new schedule: "${scheduleName}" with ID: ${scheduleId}`);
     
     setUserSchedules(prev => ({
       ...prev,
       [scheduleId]: newSchedule
     }));
     
-    await saveCompleteItem('schedules', scheduleId, newSchedule);
+    await saveToBackend('schedules', scheduleId, newSchedule);
     return scheduleId;
   };
 
-  // **OPTIMIZED: Create new memory category**
   const createNewMemoryCategory = async (categoryName) => {
     const categoryId = generateId();
     const newCategory = {
@@ -194,18 +223,17 @@ const useDataManagement = (messages) => {
       lastUpdated: new Date()
     };
     
-    console.log(`🧠 Creating new memory category: ${categoryName}`);
+    console.log(`🧠 Creating new memory category: "${categoryName}" with ID: ${categoryId}`);
     
     setUserMemory(prev => ({
       ...prev,
       [categoryId]: newCategory
     }));
     
-    await saveCompleteItem('memory', categoryId, newCategory);
+    await saveToBackend('memory', categoryId, newCategory);
     return categoryId;
   };
 
-  // **OPTIMIZED: Create new chat**
   const createNewChat = async (chatTitle) => {
     const chatId = generateId();
     const newChat = {
@@ -215,20 +243,47 @@ const useDataManagement = (messages) => {
       lastActivity: new Date()
     };
     
-    console.log(`💬 Creating new chat: ${chatTitle}`);
+    console.log(`💬 Creating new chat: "${chatTitle}" with ID: ${chatId}`);
     
     setUserChats(prev => ({
       ...prev,
       [chatId]: newChat
     }));
     
-    await saveCompleteItem('chats', chatId, newChat);
+    await saveToBackend('chats', chatId, newChat);
     return chatId;
   };
 
-  // **SUPER OPTIMIZED: Add to list (only save the new item!)**
-  const addToUserList = async (listId, item) => {
-    console.log(`📝 Adding "${item}" to list ${listId}`);
+  // **FIXED: Smart add to list - finds the right list**
+  const addToUserList = async (listId, item, listHint = null) => {
+    console.log(`📝 Adding "${item}" to list. ListID: ${listId}, Hint: "${listHint}"`);
+    
+    let targetListId = listId;
+    let targetList = userLists[listId];
+    
+    // **SMART TARGETING: If no specific list or list doesn't exist, try to find by hint**
+    if (!targetList && listHint) {
+      const found = findListByName(listHint);
+      if (found) {
+        targetListId = found.id;
+        targetList = found.list;
+        console.log(`🎯 Found target list by hint: "${targetList.title}"`);
+      }
+    }
+    
+    // **SMART TARGETING: If still no list, find the most recent list**
+    if (!targetList) {
+      const listIds = Object.keys(userLists);
+      if (listIds.length > 0) {
+        // Get the most recently created list
+        const mostRecentListId = listIds.reduce((latest, current) => {
+          return userLists[current].createdAt > userLists[latest].createdAt ? current : latest;
+        });
+        targetListId = mostRecentListId;
+        targetList = userLists[mostRecentListId];
+        console.log(`🎯 Using most recent list: "${targetList.title}"`);
+      }
+    }
     
     // Create the new item object
     const newItem = {
@@ -239,11 +294,9 @@ const useDataManagement = (messages) => {
     };
     
     setUserLists(prev => {
-      let targetList = prev[listId];
-      
-      // If list doesn't exist, create it first
+      // If still no list found, create a new one
       if (!targetList) {
-        console.log('List not found, creating new list');
+        console.log('📝 No suitable list found, creating new "Quick List"');
         const newListId = generateId();
         const newList = {
           title: "Quick List",
@@ -252,8 +305,8 @@ const useDataManagement = (messages) => {
           lastUpdated: new Date()
         };
         
-        // Save complete new list (since it's new)
-        saveCompleteItem('lists', newListId, newList);
+        // Save new list to backend
+        saveToBackend('lists', newListId, newList);
         
         return {
           ...prev,
@@ -268,20 +321,32 @@ const useDataManagement = (messages) => {
         lastUpdated: new Date()
       };
       
-      // **OPTIMIZATION: Only save the new item + update metadata**
-      addSingleItem('lists', listId, newItem);
-      updateMetadata('lists', listId, { lastUpdated: new Date(), itemCount: updatedList.items.length });
+      console.log(`✅ Added "${item}" to "${targetList.title}" (total: ${updatedList.items.length} items)`);
+      
+      // Save updated list to backend
+      saveToBackend('lists', targetListId, updatedList);
       
       return {
         ...prev,
-        [listId]: updatedList
+        [targetListId]: updatedList
       };
     });
   };
 
-  // **SUPER OPTIMIZED: Add to schedule (only save the new event!)**
-  const addToUserSchedule = async (scheduleId, event) => {
-    console.log(`📅 Adding event to schedule ${scheduleId}:`, event);
+  // Similar smart targeting for schedules and memory...
+  const addToUserSchedule = async (scheduleId, event, scheduleHint = null) => {
+    console.log(`📅 Adding event to schedule. ScheduleID: ${scheduleId}, Hint: "${scheduleHint}"`);
+    
+    let targetScheduleId = scheduleId;
+    let targetSchedule = userSchedules[scheduleId];
+    
+    if (!targetSchedule && scheduleHint) {
+      const found = findScheduleByName(scheduleHint);
+      if (found) {
+        targetScheduleId = found.id;
+        targetSchedule = found.schedule;
+      }
+    }
     
     const newEvent = {
       ...event,
@@ -290,10 +355,7 @@ const useDataManagement = (messages) => {
     };
     
     setUserSchedules(prev => {
-      const targetSchedule = prev[scheduleId];
-      
       if (!targetSchedule) {
-        console.log('Schedule not found, creating new schedule');
         const newScheduleId = generateId();
         const newSchedule = {
           title: "My Schedule",
@@ -302,7 +364,7 @@ const useDataManagement = (messages) => {
           lastUpdated: new Date()
         };
         
-        saveCompleteItem('schedules', newScheduleId, newSchedule);
+        saveToBackend('schedules', newScheduleId, newSchedule);
         
         return {
           ...prev,
@@ -316,20 +378,28 @@ const useDataManagement = (messages) => {
         lastUpdated: new Date()
       };
       
-      // **OPTIMIZATION: Only save the new event + update metadata**
-      addSingleItem('schedules', scheduleId, newEvent);
-      updateMetadata('schedules', scheduleId, { lastUpdated: new Date(), eventCount: updatedSchedule.events.length });
+      saveToBackend('schedules', targetScheduleId, updatedSchedule);
       
       return {
         ...prev,
-        [scheduleId]: updatedSchedule
+        [targetScheduleId]: updatedSchedule
       };
     });
   };
 
-  // **SUPER OPTIMIZED: Add to memory (only save the new memory item!)**
-  const addToUserMemory = async (categoryId, data) => {
-    console.log(`🧠 Adding to memory category ${categoryId}:`, data);
+  const addToUserMemory = async (categoryId, data, memoryHint = null) => {
+    console.log(`🧠 Adding to memory category. CategoryID: ${categoryId}, Hint: "${memoryHint}"`);
+    
+    let targetCategoryId = categoryId;
+    let targetCategory = userMemory[categoryId];
+    
+    if (!targetCategory && memoryHint) {
+      const found = findMemoryByName(memoryHint);
+      if (found) {
+        targetCategoryId = found.id;
+        targetCategory = found.memory;
+      }
+    }
     
     const newMemoryItem = {
       ...data,
@@ -338,10 +408,7 @@ const useDataManagement = (messages) => {
     };
     
     setUserMemory(prev => {
-      const targetCategory = prev[categoryId];
-      
       if (!targetCategory) {
-        console.log('Memory category not found, creating new category');
         const newCategoryId = generateId();
         const newCategory = {
           title: "General Memory",
@@ -350,7 +417,7 @@ const useDataManagement = (messages) => {
           lastUpdated: new Date()
         };
         
-        saveCompleteItem('memory', newCategoryId, newCategory);
+        saveToBackend('memory', newCategoryId, newCategory);
         
         return {
           ...prev,
@@ -364,18 +431,16 @@ const useDataManagement = (messages) => {
         lastUpdated: new Date()
       };
       
-      // **OPTIMIZATION: Only save the new memory item + update metadata**
-      addSingleItem('memory', categoryId, newMemoryItem);
-      updateMetadata('memory', categoryId, { lastUpdated: new Date(), itemCount: updatedCategory.items.length });
+      saveToBackend('memory', targetCategoryId, updatedCategory);
       
       return {
         ...prev,
-        [categoryId]: updatedCategory
+        [targetCategoryId]: updatedCategory
       };
     });
   };
 
-  // **ENHANCED: AI Actions handler (unchanged logic)**
+  // **COMPLETELY FIXED: AI Actions handler with smart targeting**
   const handleAiActions = async (actions) => {
     console.log("🤖 Processing AI actions:", actions);
     
@@ -390,24 +455,26 @@ const useDataManagement = (messages) => {
             break;
             
           case 'add_to_list':
-            const listIds = Object.keys(userLists);
-            let targetListId = action.data?.targetId || action.listId;
-            
-            if (!targetListId && listIds.length > 0) {
-              targetListId = listIds[listIds.length - 1];
-            }
-            
+            // **FIXED: Extract list hint from action data**
+            const listHint = action.data?.listName || action.data?.targetName || action.data?.listType;
             const items = action.data?.items || [action.data?.text || action.item];
             
-            if (targetListId) {
-              for (const item of items) {
-                await addToUserList(targetListId, item);
+            console.log(`🎯 Adding items with hint: "${listHint}"`);
+            
+            // Find target list by hint first
+            let targetListId = action.data?.targetId || action.listId;
+            
+            if (!targetListId && listHint) {
+              const found = findListByName(listHint);
+              if (found) {
+                targetListId = found.id;
+                console.log(`✅ Found target list "${found.list.title}" for hint "${listHint}"`);
               }
-            } else {
-              const newListId = await createNewList('Quick List');
-              for (const item of items) {
-                await addToUserList(newListId, item);
-              }
+            }
+            
+            // Add each item
+            for (const item of items) {
+              await addToUserList(targetListId, item, listHint);
             }
             break;
             
@@ -417,21 +484,16 @@ const useDataManagement = (messages) => {
             break;
             
           case 'add_event':
-            const scheduleIds = Object.keys(userSchedules);
-            let targetScheduleId = action.data?.targetId || action.scheduleId;
-            
-            if (!targetScheduleId && scheduleIds.length > 0) {
-              targetScheduleId = scheduleIds[scheduleIds.length - 1];
-            }
-            
+            const scheduleHint = action.data?.scheduleName || action.data?.targetName;
             const eventData = action.data || action.event || {};
             
-            if (targetScheduleId) {
-              await addToUserSchedule(targetScheduleId, eventData);
-            } else {
-              const newScheduleId = await createNewSchedule('My Schedule');
-              await addToUserSchedule(newScheduleId, eventData);
+            let targetScheduleId = action.data?.targetId || action.scheduleId;
+            if (!targetScheduleId && scheduleHint) {
+              const found = findScheduleByName(scheduleHint);
+              if (found) targetScheduleId = found.id;
             }
+            
+            await addToUserSchedule(targetScheduleId, eventData, scheduleHint);
             break;
             
           case 'create_memory':
@@ -440,21 +502,16 @@ const useDataManagement = (messages) => {
             break;
             
           case 'store_memory':
-            const memoryIds = Object.keys(userMemory);
-            let targetMemoryId = action.data?.targetId || action.categoryId;
-            
-            if (!targetMemoryId && memoryIds.length > 0) {
-              targetMemoryId = memoryIds[memoryIds.length - 1];
-            }
-            
+            const memoryHint = action.data?.categoryName || action.data?.targetName;
             const memoryData = action.data || {};
             
-            if (targetMemoryId) {
-              await addToUserMemory(targetMemoryId, memoryData);
-            } else {
-              const newMemoryId = await createNewMemoryCategory('General Memory');
-              await addToUserMemory(newMemoryId, memoryData);
+            let targetMemoryId = action.data?.targetId || action.categoryId;
+            if (!targetMemoryId && memoryHint) {
+              const found = findMemoryByName(memoryHint);
+              if (found) targetMemoryId = found.id;
             }
+            
+            await addToUserMemory(targetMemoryId, memoryData, memoryHint);
             break;
             
           case 'create_chat':
