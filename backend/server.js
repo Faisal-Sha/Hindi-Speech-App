@@ -607,6 +607,46 @@ app.post('/add-item', async (req, res) => {
     }
   });
 
+  // Add this to your backend/server.js - Simple translation endpoint
+
+  app.post('/translate', async (req, res) => {
+    try {
+      const { text, targetLanguage } = req.body;
+      
+      console.log(`🌍 Translating "${text}" to ${targetLanguage}`);
+
+      // Use your existing OpenAI instance for translation
+      const completion = await openai.chat.completions.create({
+        model: "gpt-3.5-turbo",
+        messages: [
+          {
+            role: "system",
+            content: `You are a translator. Translate the given text to ${targetLanguage}. Only return the translated text, nothing else.`
+          },
+          {
+            role: "user", 
+            content: text
+          }
+        ],
+        max_tokens: 200,
+        temperature: 0.3,
+      });
+
+      const translatedText = completion.choices[0].message.content.trim();
+      
+      console.log(`✅ Translated: "${text}" -> "${translatedText}"`);
+      
+      res.json({ translatedText });
+
+    } catch (error) {
+      console.error('❌ Translation error:', error);
+      res.status(500).json({ 
+        error: 'Translation failed',
+        translatedText: text // Return original text on error
+      });
+    }
+  });
+
 // Initialize and start server
 async function startServer() {
   

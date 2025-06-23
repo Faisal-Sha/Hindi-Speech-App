@@ -571,3 +571,665 @@ body {
     padding: 8px 12px;
   }
 }
+
+/* ===== ADD THESE CLASSES TO YOUR EXISTING APP.CSS ===== */
+/* Keep all your existing CSS and add these new classes below */
+
+/* ===== ALERT SYSTEM (New) ===== */
+.alert {
+  padding: 15px;
+  margin-bottom: 20px;
+  border-radius: var(--radius-sm, 8px);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-weight: 600;
+  animation: slideDown 0.3s ease;
+}
+
+.alert-error {
+  background: rgba(255, 68, 68, 0.9);
+  color: white;
+  border: 2px solid #ff4444;
+}
+
+.alert-info {
+  background: rgba(255, 165, 0, 0.9);
+  color: white;
+  border: 2px solid #ffa500;
+}
+
+.retry-btn {
+  background: rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: white;
+  padding: 8px 15px;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.retry-btn:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* ===== HEADER SECTION ENHANCEMENTS ===== */
+/* Keep your existing .header styles and add these */
+.header-section {
+  /* Use all your existing .header styles */
+  font-size: 20px;
+  text-align: center;
+  padding: 20px;
+  background-image: url('https://images.unsplash.com/photo-1589730880765-6adf993bb581?q=80&w=2940&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+  position: relative;
+  margin-bottom: 25px;
+}
+
+.header-title {
+  margin-bottom: 25px;
+}
+
+.header-title h1,
+.header-title h2,
+.header-title p {
+  color: rgb(245, 245, 245);
+  text-shadow: 5px 5px 10px rgba(0, 0, 0, 1);
+}
+
+.header-title h1 {
+  font-size: 40px;
+}
+
+.header-title h2 {
+  font-size: 30px;
+  font-weight: 1000;
+}
+
+.header-title p {
+  font-size: 20px;
+  font-weight: 800;
+  margin-bottom: 20px;
+}
+
+.language-selector {
+  display: inline-block;
+}
+
+.language-dropdown {
+  padding: 12px 20px;
+  border: 2px solid rgba(255, 255, 255, 0.5);
+  border-radius: 25px;
+  background: rgba(255, 255, 255, 0.9);
+  font-size: 16px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  min-width: 200px;
+  color: #333;
+}
+
+.language-dropdown:hover {
+  border-color: var(--primary-green);
+  box-shadow: 0 4px 15px rgba(116, 196, 46, 0.3);
+}
+
+.language-dropdown:focus {
+  outline: none;
+  border-color: var(--primary-green);
+  box-shadow: 0 0 0 3px rgba(116, 196, 46, 0.2);
+}
+
+/* ===== STATUS SECTION ENHANCEMENTS ===== */
+/* Keep your existing .status-section styles and add these */
+.status-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 15px;
+  justify-content: center;
+  margin-bottom: 15px;
+}
+
+/* ===== LIVE SPEECH DISPLAY (New) ===== */
+.live-speech {
+  background: rgba(145, 124, 113, 0.9); /* Use your status-bg color */
+  border: 2px solid var(--primary-green);
+  border-radius: 15px;
+  padding: 20px;
+  margin: 15px 0;
+  animation: fadeIn 0.3s ease;
+}
+
+.live-speech strong {
+  color: var(--primary-green);
+  font-size: 16px;
+  display: block;
+  margin-bottom: 10px;
+}
+
+.speech-text {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  padding: 15px;
+  font-size: 18px;
+  line-height: 1.5;
+  color: white;
+  min-height: 50px;
+  border: 1px dashed var(--primary-green);
+}
+
+/* ===== CONTENT CONTAINER ENHANCEMENTS ===== */
+/* Keep your existing .message-container styles and add these */
+.content-container {
+  /* Use all your existing .message-container styles */
+  max-height: 500px;
+  overflow-y: auto;
+  padding: 20px;
+  background: rgba(143, 131, 131, 0.9);
+  border-radius: 15px;
+  box-shadow: 0 4px 20px rgba(225, 224, 224, 0.1);
+  margin-bottom: 25px;
+}
+
+.content-title {
+  color: var(--primary-green);
+  font-size: 24px;
+  margin-bottom: 20px;
+  text-align: center;
+  border-bottom: 2px solid rgba(116, 196, 46, 0.3);
+  padding-bottom: 10px;
+}
+
+/* ===== EMPTY STATES (Enhanced) ===== */
+.empty-state {
+  text-align: center;
+  color: #1e1e1e; /* Your existing no-messages color */
+  font-style: italic;
+  padding: 40px;
+  font-size: 20px; /* Your existing no-messages font-size */
+}
+
+.empty-state h3 {
+  font-size: 24px;
+  margin-bottom: 15px;
+  color: var(--primary-green);
+}
+
+.empty-state p {
+  font-size: 18px;
+  line-height: 1.6;
+  margin-bottom: 15px;
+}
+
+.empty-state-hint {
+  background: rgba(116, 196, 46, 0.1);
+  border-radius: 10px;
+  padding: 10px;
+  margin-top: 15px;
+}
+
+.empty-state-hint small {
+  color: var(--primary-green);
+  font-style: italic;
+}
+
+/* ===== LOADING STATE (New) ===== */
+.loading-state {
+  text-align: center;
+  padding: 50px 20px;
+  color: var(--primary-green);
+}
+
+.loading-spinner {
+  font-size: 48px;
+  animation: spin 1s linear infinite;
+  margin-bottom: 20px;
+}
+
+/* ===== COLLAPSIBLE SECTIONS (New) ===== */
+.collapsible-section {
+  margin-bottom: 20px;
+  border: 1px solid rgba(116, 196, 46, 0.2);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.collapsible-header {
+  background: rgba(116, 196, 46, 0.1);
+  padding: 15px 20px;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  transition: all 0.3s ease;
+}
+
+.collapsible-header:hover {
+  background: rgba(116, 196, 46, 0.15);
+}
+
+.collapsible-header-content h4 {
+  color: var(--primary-green);
+  font-size: 18px;
+  margin-bottom: 5px;
+}
+
+.collapsible-header-meta {
+  font-size: 12px;
+  color: #666;
+}
+
+.collapsible-arrow {
+  font-size: 12px;
+  color: var(--primary-green);
+  transition: transform 0.3s ease;
+}
+
+.collapsible-arrow.expanded {
+  transform: rotate(180deg);
+}
+
+.collapsible-content {
+  padding: 20px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+/* ===== MESSAGES CONTAINER (Enhanced) ===== */
+.messages-container {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.message-time {
+  font-size: 11px;
+  opacity: 0.7;
+  text-align: right;
+  margin-top: 8px;
+}
+
+.message-actions {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.2);
+  font-size: 10px;
+}
+
+/* ===== DATA DISPLAY SECTIONS (New) ===== */
+.data-section {
+  margin-top: 30px;
+  padding-top: 25px;
+  border-top: 2px solid rgba(116, 196, 46, 0.3);
+}
+
+.data-item {
+  background: rgba(116, 196, 46, 0.1);
+  border: 1px solid rgba(116, 196, 46, 0.2);
+  border-radius: 10px;
+  padding: 15px;
+  margin-bottom: 15px;
+}
+
+.data-item h4 {
+  color: var(--primary-green);
+  font-size: 18px;
+  margin-bottom: 10px;
+}
+
+/* ===== LIST ITEMS (New) ===== */
+.list-items {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.list-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 5px;
+  border-left: 3px solid var(--primary-green);
+  color: #ddd;
+  font-size: 14px;
+  margin-bottom: 5px;
+  transition: all 0.3s ease;
+}
+
+.list-item:hover {
+  background: rgba(116, 196, 46, 0.1);
+  transform: translateX(5px);
+}
+
+.list-item.completed {
+  opacity: 0.7;
+}
+
+.list-item-icon {
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.list-item-text {
+  flex-grow: 1;
+}
+
+.list-item-text.completed {
+  text-decoration: line-through;
+}
+
+.empty-list-message,
+.empty-schedule-message,
+.empty-memory-message {
+  text-align: center;
+  padding: 20px;
+  color: #ccc;
+  font-style: italic;
+}
+
+/* ===== SCHEDULE EVENTS (New) ===== */
+.schedule-events {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.schedule-event {
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 5px;
+  border-left: 4px solid var(--primary-green);
+  color: #ddd;
+  margin-bottom: 8px;
+  transition: all 0.3s ease;
+}
+
+.schedule-event:hover {
+  background: rgba(116, 196, 46, 0.1);
+  transform: translateX(5px);
+}
+
+.schedule-event-title {
+  font-weight: bold;
+  color: var(--primary-green);
+  margin-bottom: 5px;
+}
+
+.schedule-event-time,
+.schedule-event-location {
+  font-size: 14px;
+  color: #ccc;
+  margin-bottom: 3px;
+}
+
+/* ===== MEMORY ITEMS (New) ===== */
+.memory-items {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.memory-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 5px;
+  border-left: 3px solid var(--primary-green);
+  color: #ddd;
+  font-size: 14px;
+  margin-bottom: 5px;
+  transition: all 0.3s ease;
+}
+
+.memory-item:hover {
+  background: rgba(116, 196, 46, 0.1);
+  transform: translateX(5px);
+}
+
+.memory-item-icon {
+  font-size: 16px;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.memory-item-content {
+  flex-grow: 1;
+  line-height: 1.4;
+}
+
+/* ===== VOICE CONTROLS ENHANCEMENTS ===== */
+/* Keep your existing .controls styles and add these */
+.voice-controls {
+  /* Use all your existing .controls styles */
+  display: flex;
+  gap: 15px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin: 30px 0;
+  padding: 20px;
+  background: rgba(50, 50, 50, 0.8);
+  border-radius: 20px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+.controls-row {
+  display: flex;
+  gap: 15px;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  width: 100%;
+}
+
+.controls-row.primary {
+  margin-bottom: 10px;
+}
+
+.controls-row.secondary {
+  opacity: 0.8;
+}
+
+/* ===== HELP SECTION (New) ===== */
+.controls-help {
+  width: 100%;
+  max-width: 600px;
+  margin-top: 20px;
+}
+
+.help-section {
+  background: rgba(116, 196, 46, 0.1);
+  border-radius: 15px;
+  padding: 20px;
+}
+
+.help-section h4 {
+  color: var(--primary-green);
+  margin-bottom: 15px;
+  text-align: center;
+}
+
+.help-tips {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.help-tip {
+  font-size: 14px;
+  color: #ccc;
+  line-height: 1.4;
+}
+
+.help-tip strong {
+  color: var(--primary-green);
+}
+
+/* ===== STATUS INDICATORS (New) ===== */
+.controls-status {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: center;
+  width: 100%;
+  margin-top: 15px;
+}
+
+.status-warning,
+.recording-indicator,
+.ai-processing {
+  padding: 10px 20px;
+  border-radius: 20px;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.status-warning {
+  background: rgba(255, 165, 0, 0.2);
+  border: 1px solid #ffa500;
+  color: #cc8400;
+}
+
+.recording-indicator {
+  background: rgba(255, 71, 87, 0.2);
+  border: 1px solid #ff4757;
+  color: #ff4757;
+  animation: pulse 1s infinite;
+}
+
+.ai-processing {
+  background: rgba(116, 196, 46, 0.2);
+  border: 1px solid var(--primary-green);
+  color: var(--primary-green);
+}
+
+/* ===== DEBUG PANEL (New) ===== */
+.debug-panel {
+  position: fixed;
+  bottom: 10px;
+  right: 10px;
+  background: rgba(0, 0, 0, 0.9);
+  color: white;
+  padding: 15px;
+  border-radius: 10px;
+  font-size: 12px;
+  max-width: 300px;
+  font-family: 'Courier New', monospace;
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--primary-green);
+  z-index: 1000;
+}
+
+.debug-panel div {
+  margin-bottom: 3px;
+}
+
+.debug-panel strong {
+  color: var(--primary-green);
+}
+
+/* ===== NEW ANIMATIONS ===== */
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Keep your existing @keyframes spin, pulse, recordingPulse, etc. */
+
+/* ===== RESPONSIVE ENHANCEMENTS ===== */
+/* Add these to your existing responsive styles */
+
+@media (max-width: 768px) {
+  .header-section {
+    padding: 15px;
+  }
+  
+  .language-dropdown {
+    min-width: 180px;
+    font-size: 14px;
+  }
+  
+  .status-row {
+    flex-direction: column;
+    gap: 10px;
+  }
+  
+  .controls-row {
+    flex-direction: column;
+    width: 100%;
+  }
+  
+  .live-speech {
+    padding: 15px;
+  }
+  
+  .speech-text {
+    font-size: 16px;
+  }
+  
+  .debug-panel {
+    position: relative;
+    bottom: auto;
+    right: auto;
+    margin-top: 20px;
+    max-width: 100%;
+  }
+  
+  .help-section {
+    padding: 15px;
+  }
+  
+  .help-tip {
+    font-size: 13px;
+  }
+  
+  .collapsible-header {
+    padding: 12px 15px;
+  }
+  
+  .collapsible-content {
+    padding: 15px;
+  }
+  
+  .list-item,
+  .schedule-event,
+  .memory-item {
+    padding: 10px;
+    margin: 5px 0;
+  }
+}
+
+@media (max-width: 480px) {
+  .help-tip {
+    font-size: 12px;
+  }
+  
+  .list-item-text,
+  .memory-item-content {
+    font-size: 13px;
+  }
+}
