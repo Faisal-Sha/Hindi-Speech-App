@@ -101,62 +101,84 @@ async function buildSmartContext(userId, mode, currentData, message) {
       chats: { ...persistentData.chats, ...currentData.chats }
     };
     
-    // Build intelligent summary based on current mode and data
+    // Build context with exact names for AI matching
+    let contextInfo = `CURRENT MODE: ${mode}\n`;
+    contextInfo += `USER MESSAGE: "${message}"\n`;
+    contextInfo += `AI INSTRUCTION: Use intelligent matching to connect user's request to existing items below.\n\n`;
+    
+    // Build detailed summaries
     const dataSummary = {
       lists: {
         count: Object.keys(mergedData.lists).length,
-        names: Object.values(mergedData.lists).map(list => ({
-          name: list.title,
-          type: list.type || 'custom',
-          itemCount: list.items?.length || 0
-        }))
+        names: Object.keys(mergedData.lists)
       },
       schedules: {
         count: Object.keys(mergedData.schedules).length,
-        names: Object.values(mergedData.schedules).map(schedule => ({
-          name: schedule.title,
-          eventCount: schedule.events?.length || 0
-        })),
-        upcomingEvents: Object.values(mergedData.schedules)
-          .flatMap(schedule => schedule.events || [])
-          .slice(0, 5)
-          .map(event => ({ title: event.title, time: event.time }))
+        names: Object.keys(mergedData.schedules)
       },
       memory: {
         count: Object.keys(mergedData.memory).length,
-        categories: Object.values(mergedData.memory).map(category => ({
-          name: category.title,
-          itemCount: category.items?.length || 0
-        }))
+        categories: Object.keys(mergedData.memory)
       },
       chats: {
         count: Object.keys(mergedData.chats).length,
-        topics: Object.values(mergedData.chats).map(chat => chat.title)
+        topics: Object.keys(mergedData.chats)
       }
     };
     
-    // Build mode-aware context (but don't limit functionality to mode)
-    let contextInfo = `CURRENT MODE: ${mode}\n`;
-    
-    // Always include summary, but emphasize current mode
+    // Include exact names with context for better AI matching
     if (mode === 'lists' || dataSummary.lists.count > 0) {
-      contextInfo += `LISTS (${dataSummary.lists.count}): ${dataSummary.lists.names.map(l => `"${l.name}" (${l.itemCount} items)`).join(', ')}\n`;
+      contextInfo += `EXISTING LISTS (${dataSummary.lists.count}) - USE THESE EXACT NAMES:\n`;
+      if (dataSummary.lists.count > 0) {
+        dataSummary.lists.names.forEach(listName => {
+          const list = mergedData.lists[listName];
+          const itemCount = list.items?.length || 0;
+          const listType = list.listType || 'custom';
+          const recentItems = list.items?.slice(-3).map(item => item.text || item.name).join(', ') || 'empty';
+          contextInfo += `  • "${listName}" (${listType}, ${itemCount} items, recent: ${recentItems})\n`;
+        });
+      } else {
+        contextInfo += '  • None\n';
+      }
+      contextInfo += '\n';
     }
     
     if (mode === 'schedule' || dataSummary.schedules.count > 0) {
-      contextInfo += `SCHEDULES (${dataSummary.schedules.count}): ${dataSummary.schedules.names.map(s => `"${s.name}" (${s.eventCount} events)`).join(', ')}\n`;
-      if (dataSummary.schedules.upcomingEvents.length > 0) {
-        contextInfo += `UPCOMING: ${dataSummary.schedules.upcomingEvents.map(e => `${e.title} at ${e.time}`).join(', ')}\n`;
+      contextInfo += `EXISTING SCHEDULES (${dataSummary.schedules.count}) - USE THESE EXACT NAMES:\n`;
+      if (dataSummary.schedules.count > 0) {
+        dataSummary.schedules.names.forEach(scheduleName => {
+          const schedule = mergedData.schedules[scheduleName];
+          const eventCount = schedule.events?.length || 0;
+          contextInfo += `  • "${scheduleName}" (${eventCount} events)\n`;
+        });
+      } else {
+        contextInfo += '  • None\n';
       }
+      contextInfo += '\n';
     }
     
     if (mode === 'memory' || dataSummary.memory.count > 0) {
-      contextInfo += `MEMORY (${dataSummary.memory.count}): ${dataSummary.memory.categories.map(c => `"${c.name}" (${c.itemCount} items)`).join(', ')}\n`;
+      contextInfo += `EXISTING MEMORY CATEGORIES (${dataSummary.memory.count}) - USE THESE EXACT NAMES:\n`;
+      if (dataSummary.memory.count > 0) {
+        dataSummary.memory.categories.forEach(categoryName => {
+          const memory = mergedData.memory[categoryName];
+          const itemCount = memory.items?.length || 0;
+          contextInfo += `  • "${categoryName}" (${itemCount} items)\n`;
+        });
+      } else {
+        contextInfo += '  • None\n';
+      }
+      contextInfo += '\n';
     }
     
-    if (mode === 'chat' || dataSummary.chats.count > 0) {
-      contextInfo += `CHAT TOPICS (${dataSummary.chats.count}): ${dataSummary.chats.topics.join(', ')}\n`;
-    }
+    // Add AI matching hints
+    contextInfo += `AI MATCHING HINTS:\n`;
+    contextInfo += `- Food/grocery items → likely target shopping-related lists\n`;
+    contextInfo += `- Party/celebration items → likely target birthday/party lists\n`;
+    contextInfo += `- Work/task items → likely target todo/work lists\n`;
+    contextInfo += `- Use context clues from what they're adding to determine best match\n`;
+    contextInfo += `- Always use exact list names from above, never create variations\n`;
+    contextInfo += `- Respond in user's language but target English list names\n`;
     
     return {
       context: contextInfo,
@@ -168,7 +190,7 @@ async function buildSmartContext(userId, mode, currentData, message) {
     return {
       context: `CURRENT MODE: ${mode}\nNo existing data\n`,
       mergedData: { lists: {}, schedules: {}, memory: {}, chats: {} },
-      dataSummary: { lists: { count: 0, names: [] }, schedules: { count: 0, names: [] }, memory: { count: 0, categories: [] } }
+      dataSummary: { lists: { count: 0, names: [] }, schedules: { count: 0, names: [] }, memory: { count: 0, categories: [] }, chats: { count: 0, topics: [] } }
     };
   }
 }
@@ -176,21 +198,33 @@ async function buildSmartContext(userId, mode, currentData, message) {
 // Enhanced system prompt - Let AI handle ALL intent detection in ANY language
 const SYSTEM_PROMPT = `You are an intelligent multilingual personal assistant. You understand user intent in ANY language and help manage their digital life.
 
-🎯 CORE PRINCIPLE: 
-- Understand user intent regardless of language
-- Current mode provides context but doesn't limit functionality
-- Users can create/manage lists/schedules/memory from any mode
+🎯 CRITICAL TARGETING RULES:
+
+1. **RESPECT SPECIFIC LIST NAMES**: When user mentions a specific list name, ALWAYS use that exact name
+   ✅ User: "add to TODO list" → Target: "TODO List" or "Todo List" (exact match)
+   ❌ NOT: Target birthday/shopping list just because of item content
+
+2. **EXACT NAME PRIORITY**: Use existing names from context exactly as they appear
+   Context: "Shopping List", "Birthday List", "TODO List"
+   ✅ User: "add to todo" → "listName": "TODO List" 
+   ❌ NOT: "listName": "Birthday List" (even if adding birthday-related tasks)
+
+3. **CONTENT-BASED MATCHING ONLY FOR VAGUE REQUESTS**: Only use item content to guess list when user doesn't specify
+   ✅ User: "add milk" (no list specified) → Use content to target "Shopping List"
+   ❌ User: "add birthday cake to TODO list" → Respect "TODO list", don't override with Birthday List
 
 🤖 AVAILABLE ACTIONS (detect these from user intent in any language):
 - create_list: Create new lists (any type: shopping, todo, books, movies, travel, etc.)
-- add_to_list: Add items to existing lists (determine which list from context)
+- add_to_list: Add items to existing lists (RESPECT user's specified list name)
 - update_list: Mark items as complete, edit, or remove
 - create_schedule: Create schedule categories
 - add_event: Add events/appointments to schedules  
 - update_event: Modify or cancel events
 - create_memory: Create memory categories (contacts, notes, passwords, etc.)
 - store_memory: Store any information in memory
-- create_chat: Create new chat topics for organized conversations
+- delete_list: Delete entire lists
+- delete_schedule: Delete entire schedules  
+- delete_memory: Delete entire memory categories
 
 📋 RESPONSE FORMAT - ALWAYS return valid JSON:
 {
@@ -199,63 +233,80 @@ const SYSTEM_PROMPT = `You are an intelligent multilingual personal assistant. Y
     {
       "type": "action_type",
       "data": { 
-        "targetId": "existing_item_id_if_applicable",
-        "listName": "for create_list",
+        "listName": "EXACT existing name from context OR user's specified name",
+        "name": "for deletion operations",
         "listType": "shopping|todo|custom", 
-        "items": ["for add_to_list"],
-        "title": "for events/memory",
-        "time": "for events",
-        "category": "for memory",
-        "info": "for storing information"
+        "items": ["for add_to_list"]
       }
     }
   ]
 }
 
-🌍 LANGUAGE INTELLIGENCE:
-- Detect user's language from their input
-- Respond in the same language
-- Understand intent regardless of language:
-  * "Add milk to list" (English)
-  * "जोड़ें दूध सूची में" (Hindi)  
-  * "Añadir leche a la lista" (Spanish)
-  * "Ajouter du lait à la liste" (French)
-  * "Milch zur Liste hinzufügen" (German)
-  -> ALL should result in same add_to_list action
+🎯 TARGETING EXAMPLES - RESPECT USER'S SPECIFIC REQUESTS:
 
-🧠 SMART CONTEXT AWARENESS:
-- If user is in Lists mode and says "add milk" -> likely add to a list
-- If user is in Schedule mode and says "meeting tomorrow" -> likely add event
-- If user is in Chat mode but says "create shopping list" -> still create list!
-- Use existing data names to determine targets (don't guess list names)
+Context: LISTS (3): "Shopping List" (2 items), "Birthday List" (1 items), "TODO List" (0 items)
 
-🎯 EXAMPLES:
+User: "add birthday cake to TODO list"
+AI THINKING: User specifically said "TODO list" - respect that, don't override based on content.
+{
+  "response": "Added birthday cake to your TODO list!",
+  "actions": [{"type": "add_to_list", "data": {"listName": "TODO List", "items": ["birthday cake"]}}]
+}
 
-User in Lists mode: "add milk and bread"
+User: "add milk and bread" (no list specified)
+AI THINKING: No specific list mentioned, use content to guess - food items = Shopping List.
 {
   "response": "Added milk and bread to your shopping list!",
-  "actions": [{"type": "add_to_list", "data": {"listType": "shopping", "items": ["milk", "bread"]}}]
+  "actions": [{"type": "add_to_list", "data": {"listName": "Shopping List", "items": ["milk", "bread"]}}]
 }
 
-User in Chat mode: "create a list for books I want to read"
+User: "delete the shopping list"
 {
-  "response": "I've created a reading list for you!",
-  "actions": [{"type": "create_list", "data": {"listName": "Books to Read", "listType": "custom"}}]
+  "response": "I've deleted your shopping list!",
+  "actions": [{"type": "delete_list", "data": {"name": "Shopping List"}}]
 }
 
-User in any mode (Hindi): "जॉन से मिलने का समय तय करें कल 3 बजे"
+User: "delete birthday list"
 {
-  "response": "मैंने कल 3 बजे जॉन के साथ आपकी मीटिंग शेड्यूल कर दी है!",
-  "actions": [{"type": "add_event", "data": {"title": "Meeting with John", "time": "tomorrow 3:00 PM", "duration": "1 hour"}}]
+  "response": "I've deleted your birthday list!",
+  "actions": [{"type": "delete_list", "data": {"name": "Birthday List"}}]
 }
 
-User: "remember John's phone is 555-1234"
-{
-  "response": "I'll remember John's phone number for you!",
-  "actions": [{"type": "store_memory", "data": {"category": "contacts", "info": {"name": "John", "phone": "555-1234"}}}]
-}
+🧠 INTELLIGENT MATCHING STRATEGY:
 
-ALWAYS return valid JSON. Let intelligence guide actions, not rigid rules.`;
+1. **USER SPECIFIES LIST NAME**: Always respect their choice
+   - "add X to [list name]" → Use specified list name
+   - "add X to todo" → Match to "TODO List" or similar
+   - "add X to shopping" → Match to "Shopping List" or similar
+
+2. **USER DOESN'T SPECIFY LIST**: Use intelligent guessing
+   - "add milk" → Probably Shopping List (food item)
+   - "add decorations" → Probably Birthday List (party item)
+   - "add meeting" → Probably TODO/Work List (task item)
+
+3. **MULTILINGUAL MATCHING**: Connect languages but respect specificity
+   - Hindi "टूडू लिस्ट में जोड़ें" → Target "TODO List"
+   - Spanish "añadir a lista de todo" → Target "TODO List"
+   - Don't override based on item content
+
+🔧 DELETION HANDLING:
+- "delete [list name]" → Use exact list name from context
+- "remove shopping list" → Target "Shopping List"
+- "delete todo" → Target "TODO List" or closest match
+
+⚠️ WHAT NOT TO DO:
+❌ User says "add birthday cake to TODO list" → DON'T target "Birthday List"
+❌ User says "add to shopping list" → DON'T create new "shopping list" if "Shopping List" exists
+❌ User says "delete list" → DON'T delete without knowing which list
+
+✅ ALWAYS RESPECT USER'S EXPLICIT LIST CHOICE OVER CONTENT-BASED GUESSING
+
+🌍 LANGUAGE RESPONSE GUIDELINES:
+- Respond in the same language the user spoke
+- Use natural, conversational responses
+- Acknowledge what was added/deleted and to/from which list
+
+ALWAYS return valid JSON. PRIORITIZE user's explicit list naming over intelligent content guessing.`;
 
 // Main chat endpoint - Pure AI intelligence
 app.post('/chat', async (req, res) => {
