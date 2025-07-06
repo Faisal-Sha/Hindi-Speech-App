@@ -87,6 +87,51 @@ async function saveConversation(userId, message, response, actions, mode, langua
   }
 }
 
+async function ensureUserWithProfile(userId, profileData = {}) {
+  try {
+    // First ensure the user exists in the users table
+    await pool.query(
+      'INSERT INTO users (user_id) VALUES ($1) ON CONFLICT (user_id) DO UPDATE SET last_active = CURRENT_TIMESTAMP',
+      [userId]
+    );
+
+    // Then ensure the user profile exists with default or provided data
+    if (Object.keys(profileData).length > 0) {
+      const { displayName, preferredLanguage, avatarEmoji, themePreference } = profileData;
+      
+      await pool.query(`
+        INSERT INTO user_profiles (user_id, display_name, preferred_language, avatar_emoji, theme_preference) 
+        VALUES ($1, $2, $3, $4, $5)
+        ON CONFLICT (user_id) 
+        DO UPDATE SET 
+          display_name = $2,
+          preferred_language = $3,
+          avatar_emoji = $4,
+          theme_preference = $5,
+          updated_at = CURRENT_TIMESTAMP
+      `, [userId, displayName, preferredLanguage || 'en-US', avatarEmoji || '👤', themePreference || 'default']);
+    }
+    
+    console.log(`✅ User ${userId} ensured with profile`);
+  } catch (error) {
+    console.error('Error ensuring user with profile:', error);
+    throw error;
+  }
+}
+
+async function getUserProfile(userId) {
+  try {
+    const result = await pool.query(`
+      SELECT * FROM get_user_profile($1)
+    `, [userId]);
+    
+    return result.rows[0] || null;
+  } catch (error) {
+    console.error('Error getting user profile:', error);
+    return null;
+  }
+}
+
 // Smart context builder - NO manual keyword detection, let AI handle everything!
 async function buildSmartContext(userId, mode, currentData, message) {
   try {
@@ -315,8 +360,14 @@ app.post('/chat', async (req, res) => {
     
     console.log(`📨 [${userId}] "${message}" (${mode} mode)`);
 
-    // Ensure user exists in database
+    // Ensure user exists and get their profile
     await ensureUser(userId);
+    const userProfile = await getUserProfile(userId);
+    
+    // Use user's preferred language if not specified
+    const effectiveLanguage = language || userProfile?.preferred_language || 'en-US';
+    
+    console.log(`🌍 Using language: ${effectiveLanguage} (user preference: ${userProfile?.preferred_language})`);
 
     // Build intelligent context
     const { context: smartContext, mergedData, dataSummary } = await buildSmartContext(
@@ -327,15 +378,23 @@ app.post('/chat', async (req, res) => {
     console.log(`🧠 Smart context: ${contextSize} chars`);
     console.log(`💾 Persistent data: ${dataSummary.lists.count} lists, ${dataSummary.schedules.count} schedules, ${dataSummary.memory.count} memory`);
 
+    // Enhanced system prompt with user context
+    const enhancedSystemPrompt = `You are an intelligent multilingual personal assistant for ${userProfile?.display_name || userId}. 
+    
+User's preferred language: ${effectiveLanguage}
+User's display name: ${userProfile?.display_name || userId}
+
+${SYSTEM_PROMPT}`;
+
     // Create AI prompt with smart context
-    const aiPrompt = `${SYSTEM_PROMPT}
+    const aiPrompt = `${enhancedSystemPrompt}
 
 CURRENT CONTEXT:
 ${smartContext}
 
 USER MESSAGE: "${message}"
 
-Understand the user's intent and respond appropriately with actions if needed.`;
+Respond in ${effectiveLanguage} and understand the user's intent, providing actions if needed.`;
 
     // Let AI handle everything
     const completion = await openai.chat.completions.create({
@@ -377,8 +436,8 @@ Understand the user's intent and respond appropriately with actions if needed.`;
       responseData.actions = [];
     }
 
-    // Save conversation to database
-    await saveConversation(userId, message, responseData.response, responseData.actions, mode, language);
+    // Save conversation to database with effective language
+    await saveConversation(userId, message, responseData.response, responseData.actions, mode, effectiveLanguage);
 
     console.log(`📤 Sending ${responseData.actions.length} actions`);
     res.json(responseData);
@@ -392,6 +451,147 @@ Understand the user's intent and respond appropriately with actions if needed.`;
   }
 });
 
+
+app.delete('/delete-user/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    
+    console.log(`🗑️ Deleting user and all data: ${userId}`);
+    
+    // Start transaction to ensure all data is deleted atomically
+    await pool.query('BEGIN');
+    
+    try {
+      // Delete in order to respect foreign key constraints
+      await pool.query('DELETE FROM conversations WHERE user_id = $1', [userId]);
+      await pool.query('DELETE FROM user_data WHERE user_id = $1', [userId]);
+      await pool.query('DELETE FROM user_sessions WHERE user_id = $1', [userId]);
+      await pool.query('DELETE FROM user_profiles WHERE user_id = $1', [userId]);
+      await pool.query('DELETE FROM users WHERE user_id = $1', [userId]);
+      
+      await pool.query('COMMIT');
+      
+      console.log(`✅ User ${userId} and all data deleted successfully`);
+      res.json({ message: 'User deleted successfully' });
+    } catch (error) {
+      await pool.query('ROLLBACK');
+      throw error;
+    }
+  } catch (error) {
+    console.error('❌ Error deleting user:', error);
+    res.status(500).json({ error: 'Failed to delete user' });
+  }
+});
+
+app.put('/update-user/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { displayName, preferredLanguage, avatarEmoji, themePreference } = req.body;
+    
+    console.log(`📝 Updating user profile: ${userId}`);
+    
+    // Update user profile
+    await pool.query(`
+      UPDATE user_profiles 
+      SET 
+        display_name = COALESCE($2, display_name),
+        preferred_language = COALESCE($3, preferred_language),
+        avatar_emoji = COALESCE($4, avatar_emoji),
+        theme_preference = COALESCE($5, theme_preference),
+        updated_at = CURRENT_TIMESTAMP
+      WHERE user_id = $1
+    `, [userId, displayName, preferredLanguage, avatarEmoji, themePreference]);
+    
+    // Also update last_active in users table
+    await pool.query(
+      'UPDATE users SET last_active = CURRENT_TIMESTAMP WHERE user_id = $1',
+      [userId]
+    );
+    
+    const updatedProfile = await getUserProfile(userId);
+    
+    console.log(`✅ User profile updated: ${userId}`);
+    res.json(updatedProfile);
+  } catch (error) {
+    console.error('❌ Error updating user profile:', error);
+    res.status(500).json({ error: 'Failed to update user profile' });
+  }
+});
+
+app.post('/create-user', async (req, res) => {
+  try {
+    const { userId, displayName, preferredLanguage, avatarEmoji } = req.body;
+    
+    console.log(`➕ Creating new user: ${userId} (${displayName})`);
+    
+    // Validation
+    if (!userId || !displayName) {
+      return res.status(400).json({ error: 'User ID and Display Name are required' });
+    }
+    
+    // Check if user already exists
+    const existingUser = await getUserProfile(userId);
+    if (existingUser) {
+      return res.status(409).json({ error: 'User already exists' });
+    }
+    
+    // Create user with profile
+    await ensureUserWithProfile(userId, {
+      displayName,
+      preferredLanguage: preferredLanguage || 'en-US',
+      avatarEmoji: avatarEmoji || '👤',
+      themePreference: 'default'
+    });
+    
+    // Return the created user profile
+    const newUserProfile = await getUserProfile(userId);
+    
+    console.log(`✅ User created successfully: ${userId}`);
+    res.status(201).json(newUserProfile);
+  } catch (error) {
+    console.error('❌ Error creating user:', error);
+    
+    if (error.code === '23505') { // Unique violation
+      res.status(409).json({ error: 'User already exists' });
+    } else {
+      res.status(500).json({ error: 'Failed to create user' });
+    }
+  }
+});
+
+app.post('/login', async (req, res) => {
+  try {
+    const { userId } = req.body;
+    
+    if (!userId) {
+      return res.status(400).json({ error: 'User ID is required' });
+    }
+    
+    const userProfile = await getUserProfile(userId);
+    
+    if (!userProfile) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    // Update last active
+    await pool.query(
+      'UPDATE users SET last_active = CURRENT_TIMESTAMP WHERE user_id = $1',
+      [userId]
+    );
+    
+    console.log(`🔐 User logged in: ${userId} (${userProfile.display_name})`);
+    
+    res.json({
+      message: 'Login successful',
+      user: userProfile
+    });
+  } catch (error) {
+    console.error('❌ Error during login:', error);
+    res.status(500).json({ error: 'Login failed' });
+  }
+});
+
+console.log('🔧 Multi-user API endpoints added to server');
 // Endpoint to persist user data changes
 app.post('/save-data', async (req, res) => {
   try {
@@ -438,7 +638,6 @@ app.get('/conversations/:userId', async (req, res) => {
   }
 });
 
-// Health check with database status
 
 
 app.post('/add-item', async (req, res) => {
@@ -586,6 +785,53 @@ app.post('/add-item', async (req, res) => {
     }
   });
   
+  app.get('/users', async (req, res) => {
+    try {
+      console.log('📋 Getting all user profiles...');
+      
+      const result = await pool.query(`
+        SELECT 
+          ucp.*,
+          COALESCE(
+            jsonb_build_object(
+              'lists_count', COALESCE((SELECT COUNT(DISTINCT data_key) FROM user_data WHERE user_id = ucp.user_id AND data_type = 'lists'), 0),
+              'schedules_count', COALESCE((SELECT COUNT(DISTINCT data_key) FROM user_data WHERE user_id = ucp.user_id AND data_type = 'schedules'), 0),
+              'memory_count', COALESCE((SELECT COUNT(DISTINCT data_key) FROM user_data WHERE user_id = ucp.user_id AND data_type = 'memory'), 0),
+              'conversations_count', COALESCE((SELECT COUNT(*) FROM conversations WHERE user_id = ucp.user_id), 0)
+            ),
+            '{}'::jsonb
+          ) as data_summary
+        FROM user_complete_profile ucp
+        ORDER BY ucp.last_active DESC NULLS LAST, ucp.user_created_at DESC
+      `);
+      
+      console.log(`✅ Found ${result.rows.length} user profiles`);
+      res.json(result.rows);
+    } catch (error) {
+      console.error('❌ Error getting users:', error);
+      res.status(500).json({ error: 'Failed to get users' });
+    }
+  });
+
+  // GET /user-profile/:userId - Get specific user profile
+  app.get('/user-profile/:userId', async (req, res) => {
+    try {
+      const { userId } = req.params;
+      console.log(`👤 Getting profile for user: ${userId}`);
+      
+      const userProfile = await getUserProfile(userId);
+      
+      if (!userProfile) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+      
+      console.log(`✅ Profile loaded for ${userId}:`, userProfile.display_name);
+      res.json(userProfile);
+    } catch (error) {
+      console.error('❌ Error getting user profile:', error);
+      res.status(500).json({ error: 'Failed to get user profile' });
+    }
+  });
   // **ENHANCED: Get data with better caching and compression**
   app.get('/data/:userId', async (req, res) => {
     try {
@@ -594,7 +840,9 @@ app.post('/add-item', async (req, res) => {
       
       console.log(`📖 Getting data for user ${userId} (compress: ${compress})`);
       
+      // Get both user data and profile
       const userData = await getUserData(userId);
+      const userProfile = await getUserProfile(userId);
       
       // Add metadata about data size
       const metadata = {
@@ -619,7 +867,8 @@ app.post('/add-item', async (req, res) => {
       console.log(`📊 Data summary:`, metadata);
       
       res.json({ 
-        ...userData, 
+        ...userData,
+        userProfile: userProfile || null,
         _metadata: metadata,
         _timestamp: new Date()
       });
@@ -629,6 +878,7 @@ app.post('/add-item', async (req, res) => {
       res.status(500).json({ error: 'Failed to get user data' });
     }
   });
+  
   
   // **NEW: Health check with performance metrics**
   app.get('/health', async (req, res) => {
@@ -698,6 +948,61 @@ app.post('/add-item', async (req, res) => {
     }
   });
 
+  async function ensureUserWithProfile(userId, profileData = {}) {
+    try {
+      await pool.query(
+        'INSERT INTO users (user_id) VALUES ($1) ON CONFLICT (user_id) DO UPDATE SET last_active = CURRENT_TIMESTAMP',
+        [userId]
+      );
+  
+      if (Object.keys(profileData).length > 0) {
+        const { displayName, preferredLanguage, avatarEmoji } = profileData;
+        
+        await pool.query(`
+          INSERT INTO user_profiles (user_id, display_name, preferred_language, avatar_emoji) 
+          VALUES ($1, $2, $3, $4)
+          ON CONFLICT (user_id) 
+          DO UPDATE SET 
+            display_name = $2,
+            preferred_language = $3,
+            avatar_emoji = $4,
+            updated_at = CURRENT_TIMESTAMP
+        `, [userId, displayName, preferredLanguage || 'en-US', avatarEmoji || '👤']);
+      }
+      
+      console.log(`✅ User ${userId} ensured with profile`);
+    } catch (error) {
+      console.error('Error ensuring user with profile:', error);
+      throw error;
+    }
+  }
+
+  async function getUserProfile(userId) {
+    try {
+      const result = await pool.query(`
+        SELECT 
+          u.user_id,
+          COALESCE(p.display_name, u.user_id) as display_name,
+          COALESCE(p.preferred_language, 'en-US') as preferred_language,
+          COALESCE(p.avatar_emoji, '👤') as avatar_emoji,
+          u.last_active,
+          jsonb_build_object(
+            'lists_count', COALESCE((SELECT COUNT(DISTINCT data_key) FROM user_data WHERE user_id = u.user_id AND data_type = 'lists'), 0),
+            'schedules_count', COALESCE((SELECT COUNT(DISTINCT data_key) FROM user_data WHERE user_id = u.user_id AND data_type = 'schedules'), 0),
+            'memory_count', COALESCE((SELECT COUNT(DISTINCT data_key) FROM user_data WHERE user_id = u.user_id AND data_type = 'memory'), 0)
+          ) as data_summary
+        FROM users u
+        LEFT JOIN user_profiles p ON u.user_id = p.user_id
+        WHERE u.user_id = $1
+      `, [userId]);
+      
+      return result.rows[0] || null;
+    } catch (error) {
+      console.error('Error getting user profile:', error);
+      return null;
+    }
+  }
+  
 // Initialize and start server
 async function startServer() {
   

@@ -1233,3 +1233,155 @@ body {
     font-size: 13px;
   }
 }
+
+.user-info-bar {
+  background: rgba(116, 196, 46, 0.1);
+  padding: 15px 20px;
+  border-radius: 15px;
+  margin: 10px 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border: 1px solid rgba(116, 196, 46, 0.2);
+  backdrop-filter: blur(5px);
+  transition: all 0.3s ease;
+}
+
+.user-info-left {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+.user-avatar {
+  font-size: 28px;
+  filter: drop-shadow(2px 2px 4px rgba(0, 0, 0, 0.3));
+}
+
+.user-name {
+  color: white;
+  font-weight: bold;
+  font-size: 18px;
+  text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+.user-language {
+  color: var(--primary-green);
+  font-size: 12px;
+  background: rgba(116, 196, 46, 0.2);
+  padding: 2px 8px;
+  border-radius: 10px;
+  border: 1px solid rgba(116, 196, 46, 0.3);
+}
+
+.switch-user-button {
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  padding: 8px 16px;
+  border-radius: 20px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  transition: all 0.3s ease;
+}
+
+.switch-user-button:hover {
+  background: rgba(255, 255, 255, 0.3);
+  border-color: rgba(255, 255, 255, 0.5);
+  transform: translateY(-1px);
+}
+
+/* ===== ENHANCED HEADER STYLES ===== */
+.language-display {
+  margin-top: 15px;
+}
+
+.current-language-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(255, 255, 255, 0.1);
+  padding: 10px 15px;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(5px);
+}
+
+.language-flag {
+  font-size: 20px;
+}
+
+.language-name {
+  color: white;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.language-note {
+  color: rgba(255, 255, 255, 0.7);
+  font-style: italic;
+  font-size: 10px;
+}
+
+/* ===== ENHANCED MESSAGES ===== */
+.message.welcome {
+  background: rgba(255, 215, 0, 0.1);
+  border-left-color: #ffd700;
+}
+
+/* ===== DATA SECTIONS ===== */
+.data-section {
+  margin-top: 30px;
+  padding: 20px;
+  background: rgba(143, 131, 131, 0.9);
+  border-radius: 15px;
+  backdrop-filter: blur(10px);
+}
+
+.data-section h3 {
+  color: var(--primary-green);
+  font-size: 20px;
+  margin-bottom: 15px;
+  text-align: center;
+  border-bottom: 2px solid rgba(116, 196, 46, 0.3);
+  padding-bottom: 10px;
+}
+
+.data-items {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 15px;
+}
+
+.data-item {
+  background: rgba(116, 196, 46, 0.1);
+  border: 1px solid rgba(116, 196, 46, 0.2);
+  border-radius: 12px;
+  padding: 15px;
+  transition: all 0.3s ease;
+}
+
+.data-item:hover {
+  background: rgba(116, 196, 46, 0.15);
+  border-color: rgba(116, 196, 46, 0.3);
+  transform: translateY(-2px);
+}
+
+.data-item h4 {
+  color: var(--primary-green);
+  font-size: 16px;
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+
+.data-item p {
+  color: white;
+  font-size: 14px;
+  margin-bottom: 5px;
+}
+
+.data-item small {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 10px;
+}
