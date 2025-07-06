@@ -18,7 +18,8 @@ const useDataManagement = (messages = []) => { // Default empty array to prevent
     
     console.log(`🔍 Looking for ${itemType}: "${targetName}" in existing items:`, Object.keys(existingItems));
     
-    // Step 1: Try exact match first (HIGHEST PRIORITY)
+    // Step 1: Try exact match 
+    // first (HIGHEST PRIORITY)
     if (existingItems[targetName]) {
       console.log(`✅ Found exact match: "${targetName}"`);
       return targetName;
@@ -142,12 +143,12 @@ const useDataManagement = (messages = []) => { // Default empty array to prevent
   };
   
   // Load user data function
-  const loadUserData = async () => {
+  const loadUserData = async (userId = 'default') => {
     try {
       setIsLoading(true);
-      console.log('📖 Loading user data...');
+      console.log(`📖 Loading user data for: ${userId}`);
       
-      const response = await fetch('http://localhost:3001/data/default');
+      const response = await fetch(`http://localhost:3001/data/${userId}`);
       
       if (response.ok) {
         const userData = await response.json();
@@ -163,7 +164,6 @@ const useDataManagement = (messages = []) => { // Default empty array to prevent
       }
     } catch (error) {
       console.error('❌ Error loading user data:', error);
-      // Continue with empty data instead of crashing
     } finally {
       setIsLoading(false);
     }
