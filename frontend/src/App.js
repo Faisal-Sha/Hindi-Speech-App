@@ -32,11 +32,11 @@ function App() {
   } = useDataManagement(messages);
 
   const {
-    isListening,
-    accumulatedText,
-    startListening,
-    stopListening,
-    clearAccumulatedText
+    isRecording: isListening,     
+    accumulatedText,             
+    startRecording: startListening, 
+    stopRecording: stopListening, 
+    clearText        
   } = useSpeechRecognition(currentLanguage);
 
   
@@ -105,7 +105,7 @@ function App() {
     const trimmedMessage = messageText.trim();
     if (!trimmedMessage) return;
 
-    clearAccumulatedText();
+    clearText();
     setInputText('');
 
     // Add user message to conversation
@@ -399,7 +399,7 @@ function App() {
                 📤 Send Speech
               </button>
               <button
-                onClick={clearAccumulatedText}
+                onClick={clearText}
                 className="clear-speech-button"
               >
                 🗑️ Clear
