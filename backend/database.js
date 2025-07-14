@@ -126,8 +126,17 @@ async function createUserList(userId, listName, listType = 'general', options = 
       const { description, color, icon } = options;
       
       const result = await pool.query(`
-        SELECT * FROM create_user_list($1, $2, $3, $4, $5, $6)
-      `, [userId, listName, listType, description, color, icon]);
+        INSERT INTO user_lists (user_id, list_name, list_type, description, color, icon)
+        VALUES ($1, $2, $3, $4, $5, $6)
+        ON CONFLICT (user_id, list_name)
+        DO UPDATE SET 
+            list_type = EXCLUDED.list_type,
+            description = EXCLUDED.description,
+            color = EXCLUDED.color,
+            icon = EXCLUDED.icon,
+            updated_at = CURRENT_TIMESTAMP
+        RETURNING *
+    `, [userId, listName, listType, description, color, icon]);
       
       return result.rows[0];
     } catch (error) {
@@ -152,16 +161,63 @@ async function addItemToList(userId, listName, itemText, options = {}) {
 }
   
 async function getUserLists(userId, includeArchived = false) {
-    try {
-      const result = await pool.query(`
-        SELECT * FROM get_user_lists($1, $2)
-      `, [userId, includeArchived]);
-      
-      return result.rows;
-    } catch (error) {
-      console.error('Error getting user lists:', error);
-      return [];
-    }
+  try {
+    const result = await pool.query(`
+        SELECT 
+            ul.id as list_id,
+            ul.list_name,
+            ul.list_type,
+            ul.description,
+            ul.color,
+            ul.icon,
+            ul.created_at as list_created,
+            ul.updated_at as list_updated,
+            COALESCE(
+                json_agg(
+                    CASE WHEN li.id IS NOT NULL THEN
+                        json_build_object(
+                            'id', li.id,
+                            'text', li.item_text,
+                            'completed', li.is_completed,
+                            'priority', li.priority,
+                            'dueDate', li.due_date,
+                            'notes', li.notes,
+                            'quantity', li.quantity,
+                            'createdAt', li.created_at
+                        )
+                    END
+                ) FILTER (WHERE li.id IS NOT NULL),
+                '[]'::json
+            ) as items
+        FROM user_lists ul
+        LEFT JOIN list_items li ON ul.id = li.list_id
+        WHERE ul.user_id = $1
+        AND ($2 OR NOT ul.is_archived)
+        GROUP BY ul.id, ul.list_name, ul.list_type, ul.description, ul.color, ul.icon, ul.created_at, ul.updated_at
+        ORDER BY ul.updated_at DESC
+    `, [userId, includeArchived]);
+
+    const listsObject = {};
+    result.rows.forEach(row => {
+        listsObject[row.list_name] = {
+            id: row.list_id,
+            name: row.list_name,
+            type: row.list_type,
+            description: row.description,
+            color: row.color,
+            icon: row.icon,
+            items: row.items,
+            lastUpdated: row.list_updated,
+            created: row.list_created
+        };
+    });
+    return listsObject;
+    
+} catch (error) {
+    console.error('❌ Error getting user lists:', error);
+    console.error('❌ Error details:', error.message);
+    return {};
+}
 }
   
 //SCHEDULE 

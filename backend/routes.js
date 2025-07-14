@@ -151,81 +151,157 @@ async function processAIActions(userId, actions) {
         
         switch (action.type) {
             case 'create_list':
-            const newList = await createUserList(
+              const listName = action.name || 
+                              action.list_name ||
+                              action.listName ||
+                              action.data?.name || 
+                              action.data?.list_name || 
+                              action.data?.listName ||
+                              action.title ||
+                              `List_${Date.now()}`;  // Ultimate fallback
+              
+              // Extract list type
+              const listType = action.list_type || 
+                              action.data?.list_type || 
+                              action.data?.type || 
+                              'general';
+
+              const newList = await createUserList(
                 userId, 
-                action.name, 
-                action.list_type || 'general',
+                listName.trim(),
+                listType,
                 {
-                description: action.description,
-                color: action.color,
-                icon: action.icon
+                    description: action.description || action.data?.description,
+                    color: action.color || action.data?.color,
+                    icon: action.icon || action.data?.icon
                 }
-            );
-            results.push({ success: true, type: 'create_list', data: newList });
-            break;
+              );
+              results.push({ success: true, type: 'create_list', data: newList });
+              break;
             
             case 'add_to_list':
-            const newItem = await addItemToList(
+              const targetListName = action.list_name || 
+                action.listName ||
+                action.data?.list_name || 
+                action.data?.listName ||
+                action.data?.targetList ||
+                'General List';
+
+              const itemText = action.item || 
+                      action.text ||
+                      action.data?.item || 
+                      action.data?.text ||
+                      'New item';
+
+              console.log(`➕ Adding "${itemText}" to list "${targetListName}"`);
+
+              const newItem = await addItemToList(
                 userId,
-                action.list_name,
-                action.item,
+                targetListName,
+                itemText,
                 {
-                priority: action.priority,
-                due_date: action.due_date,
-                notes: action.notes,
-                quantity: action.quantity
+                  priority: action.priority || action.data?.priority,
+                  due_date: action.due_date || action.data?.due_date,
+                  notes: action.notes || action.data?.notes,
+                  quantity: action.quantity || action.data?.quantity
                 }
-            );
-            results.push({ success: true, type: 'add_to_list', data: newItem });
-            break;
+                );
+              results.push({ success: true, type: 'add_to_list', data: newItem });
+              break;
             
             case 'create_schedule':
-            const newSchedule = await createUserSchedule(
-                userId,
-                action.name,
-                action.schedule_type || 'personal',
-                {
-                description: action.description,
-                color: action.color,
-                timezone: action.timezone
-                }
-            );
-            results.push({ success: true, type: 'create_schedule', data: newSchedule });
-            break;
+              const scheduleName = action.name || 
+              action.schedule_name ||
+              action.data?.name || 
+              action.data?.schedule_name ||
+              action.title ||
+              'Personal Schedule';
+
+              const scheduleType = action.schedule_type || 
+                            action.data?.schedule_type || 
+                            action.data?.type || 
+                            'personal';
+
+              console.log(`📅 Creating schedule: "${scheduleName}"`);
+
+              const newSchedule = await createUserSchedule(
+              userId,
+              scheduleName,
+              scheduleType,
+              {
+                description: action.description || action.data?.description,
+                color: action.color || action.data?.color,
+                timezone: action.timezone || action.data?.timezone
+              }
+              );
+              results.push({ success: true, type: 'create_schedule', data: newSchedule });
+              break;
             
             case 'add_event':
-            const newEvent = await addEventToSchedule(
-                userId,
-                action.schedule_name || 'Personal',
-                action.title,
-                action.start_time,
-                {
-                end_time: action.end_time,
-                location: action.location,
-                event_description: action.description,
-                event_type: action.event_type,
-                is_all_day: action.is_all_day,
-                reminder_minutes: action.reminder_minutes
-                }
-            );
-            results.push({ success: true, type: 'add_event', data: newEvent });
-            break;
+              const eventScheduleName = action.schedule_name || 
+                                             action.data?.schedule_name ||
+                                             'Personal';
+                    
+              const eventTitle = action.title || 
+                                action.event_title ||
+                                action.data?.title ||
+                                action.data?.event_title ||
+                                'New Event';
+              
+              console.log(`📆 Adding event "${eventTitle}" to schedule "${eventScheduleName}"`);
+              
+              const newEvent = await addEventToSchedule(
+                  userId,
+                  eventScheduleName,
+                  eventTitle,
+                  action.start_time || action.data?.start_time,
+                  {
+                      end_time: action.end_time || action.data?.end_time,
+                      location: action.location || action.data?.location,
+                      event_description: action.description || action.data?.description,
+                      event_type: action.event_type || action.data?.event_type,
+                      is_all_day: action.is_all_day || action.data?.is_all_day,
+                      reminder_minutes: action.reminder_minutes || action.data?.reminder_minutes
+                  }
+              );
+              results.push({ success: true, type: 'add_event', data: newEvent });
+              break;
             
             case 'create_memory':
             case 'store_memory':
-            const newMemory = await addMemoryItem(
-                userId,
-                action.category || 'General',
-                action.key || action.info,
-                action.value || action.content,
-                {
-                memory_type: action.memory_type || 'fact',
-                importance: action.importance || 0,
-                tags: action.tags || [],
-                expires_at: action.expires_at,
-                is_private: action.is_private || false
-                }
-            );
+              const categoryName = action.category || 
+              action.category_name ||
+              action.data?.category ||
+              action.data?.category_name ||
+              'General';
+
+              const memoryKey = action.key || 
+                        action.memory_key ||
+                        action.data?.key ||
+                        action.data?.memory_key ||
+                        action.info ||
+                        `Memory_${Date.now()}`;
+
+              const memoryValue = action.value || 
+                          action.content ||
+                          action.data?.value ||
+                          action.data?.content;
+
+              console.log(`🧠 Storing memory: "${memoryKey}" in category "${categoryName}"`);
+
+              const newMemory = await addMemoryItem(
+              userId,
+              categoryName,
+              memoryKey,
+              memoryValue,
+              {
+                memory_type: action.memory_type || action.data?.memory_type || 'fact',
+                importance: action.importance || action.data?.importance || 0,
+                tags: action.tags || action.data?.tags || [],
+                expires_at: action.expires_at || action.data?.expires_at,
+                is_private: action.is_private || action.data?.is_private || false
+              }
+              );
             results.push({ success: true, type: 'store_memory', data: newMemory });
             break;
             
@@ -448,46 +524,30 @@ router.delete('/delete-user/:userId', async (req, res) => {
 /* Getting all the data */
 
 router.get('/data/:userId', async (req, res) => {
-    try {
-      const { userId } = req.params;
-      const { compress = false } = req.query;
-      
-      console.log(`📖 Getting enhanced data for user ${userId} (compress: ${compress})`);
-      
-      await ensureUser(userId);
-      const userData = await getAllUserData(userId);
-      const userProfile = await getUserProfile(userId);
-      
-      // Add metadata about data size
-      const metadata = {
-        lists: {
-          count: Object.keys(userData.lists || {}).length,
-          totalItems: Object.values(userData.lists || {}).reduce((total, list) => total + (list.items?.length || 0), 0)
-        },
-        schedules: {
-          count: Object.keys(userData.schedules || {}).length,
-          totalEvents: Object.values(userData.schedules || {}).reduce((total, schedule) => total + (schedule.events?.length || 0), 0)
-        },
-        memory: {
-          count: Object.keys(userData.memory || {}).length,
-          totalItems: Object.values(userData.memory || {}).reduce((total, memory) => total + (memory.items?.length || 0), 0)
-        }
-      };
-      
-      console.log(`📊 Data summary:`, metadata);
-      
-      res.json({ 
-        ...userData,
-        userProfile: userProfile || null,
-        _metadata: metadata,
-        _timestamp: new Date()
-      });
-      
-    } catch (error) {
-      console.error('❌ Error getting user data:', error);
-      res.status(500).json({ error: 'Failed to get user data' });
-    }
-});
+  try {
+    const { userId } = req.params;
+    
+    await ensureUser(userId);
+    
+    // Get all user data
+    const [lists, schedules, memories] = await Promise.all([
+        getUserLists(userId),
+        getUserSchedules(userId) || {},
+        getUserMemories(userId) || {}
+    ]);
+    
+    const userData = {
+        lists: lists || {},
+        schedules: schedules || {},
+        memory: memories || {},
+        chats: {}
+    };
+    res.json(userData);
+    
+} catch (error) {
+    console.error('❌ Error getting user data:', error);
+    res.status(500).json({ error: 'Failed to get user data' });
+}});
 
 router.post('/save-data-enhanced', async (req, res) => {
     try {
