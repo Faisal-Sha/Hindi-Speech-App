@@ -360,31 +360,132 @@ async function createUserSchedule(userId, scheduleName, scheduleType = 'personal
   }
 }
 
-async function addEventToSchedule(userId, scheduleId, eventTitle, startTime, options = {}) {
+async function addEventToSchedule(userId, scheduleName, eventTitle, startTime, options = {}) {
   try {
+    console.log(`📅 Adding event "${eventTitle}" to schedule "${scheduleName}" for user ${userId}`);
+    
+    // Step 1: Extract all optional parameters with proper defaults
     const { 
-      end_time, 
-      location, 
-      event_description, 
-      event_type = 'appointment',
-      is_all_day = false,
-      reminder_minutes 
+      end_time = null,           // Can be null for events without end time
+      location = null,           // Optional location
+      event_description = null,  // Optional description  
+      event_type = 'appointment', // Default to 'appointment'
+      is_all_day = false,        // Default to false
+      reminder_minutes = null,   // Optional reminder
+      recurrence_rule = null     // Optional recurrence
     } = options;
-    
-    // Use direct SQL instead of stored procedure
+
+    // Step 2: SMART SCHEDULE SELECTION LOGIC (like your addItemToList)
+    let scheduleResult = await pool.query(`
+      SELECT id, schedule_name FROM user_schedules 
+      WHERE user_id = $1 AND schedule_name = $2
+    `, [userId, scheduleName]);
+
+    let scheduleId;
+    let actualScheduleName = scheduleName;
+
+    if (scheduleResult.rows.length === 0) {
+      // Requested schedule doesn't exist - check how many schedules the user has
+      const allSchedulesResult = await pool.query(`
+        SELECT id, schedule_name FROM user_schedules 
+        WHERE user_id = $1 AND is_default = false
+        ORDER BY updated_at DESC
+      `, [userId]);
+
+      if (allSchedulesResult.rows.length === 1) {
+        // Only one schedule exists - use it instead of creating a new one
+        scheduleId = allSchedulesResult.rows[0].id;
+        actualScheduleName = allSchedulesResult.rows[0].schedule_name;
+        console.log(`🎯 Only one schedule exists ("${actualScheduleName}") - adding event there instead of creating "${scheduleName}"`);
+        
+      } else if (allSchedulesResult.rows.length === 0) {
+        // No schedules exist - create the requested one
+        console.log(`📅 No schedules exist - creating new schedule "${scheduleName}" for user ${userId}`);
+        
+        const createScheduleResult = await pool.query(`
+          INSERT INTO user_schedules (user_id, schedule_name, schedule_type, created_at, updated_at)
+          VALUES ($1, $2, 'personal', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+          RETURNING id
+        `, [userId, scheduleName]);
+        
+        scheduleId = createScheduleResult.rows[0].id;
+        console.log(`✅ Created new schedule with ID: ${scheduleId}`);
+        
+      } else {
+        // Multiple schedules exist - try fuzzy matching first
+        const fuzzyMatch = allSchedulesResult.rows.find(schedule => 
+          schedule.schedule_name.toLowerCase().includes(scheduleName.toLowerCase()) ||
+          scheduleName.toLowerCase().includes(schedule.schedule_name.toLowerCase())
+        );
+        
+        if (fuzzyMatch) {
+          // Found a fuzzy match - use it
+          scheduleId = fuzzyMatch.id;
+          actualScheduleName = fuzzyMatch.schedule_name;
+          console.log(`🎯 Found fuzzy match: "${actualScheduleName}" for requested "${scheduleName}"`);
+          
+        } else {
+          // No fuzzy match - create new schedule
+          console.log(`📅 No fuzzy match found for "${scheduleName}" - creating new schedule`);
+          
+          const createScheduleResult = await pool.query(`
+            INSERT INTO user_schedules (user_id, schedule_name, schedule_type, created_at, updated_at)
+            VALUES ($1, $2, 'personal', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            RETURNING id
+          `, [userId, scheduleName]);
+          
+          scheduleId = createScheduleResult.rows[0].id;
+          console.log(`✅ Created new schedule with ID: ${scheduleId}`);
+        }
+      }
+    } else {
+      // Exact match found - use it
+      scheduleId = scheduleResult.rows[0].id;
+      console.log(`✅ Found exact schedule match: "${actualScheduleName}"`);
+    }
+
+    console.log(`📅 Using schedule: "${actualScheduleName}" (ID: ${scheduleId})`);
+
+    // Step 3: Insert event with CORRECT parameter order matching your database schema
     const result = await pool.query(`
-      INSERT INTO schedule_events (schedule_id, event_title, event_description, start_time, end_time, location, event_type, is_all_day, reminder_minutes)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      INSERT INTO schedule_events (
+        schedule_id, 
+        event_title, 
+        event_description, 
+        start_time, 
+        end_time, 
+        location, 
+        event_type, 
+        is_all_day, 
+        reminder_minutes,
+        recurrence_rule
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
       RETURNING *
-    `, [scheduleId, eventTitle, event_description, startTime, end_time, location, event_type, is_all_day, reminder_minutes]);
-    
+    `, [
+      scheduleId,           // $1 - schedule_id (integer)
+      eventTitle,           // $2 - event_title (character varying)
+      event_description,    // $3 - event_description (text) 
+      startTime,            // $4 - start_time (timestamp without time zone)
+      end_time,             // $5 - end_time (timestamp without time zone)
+      location,             // $6 - location (character varying)
+      event_type,           // $7 - event_type (character varying)
+      is_all_day,           // $8 - is_all_day (boolean)
+      reminder_minutes,     // $9 - reminder_minutes (integer)
+      recurrence_rule       // $10 - recurrence_rule (text)
+    ]);
+
+    console.log(`✅ Event successfully added to schedule "${actualScheduleName}":`, result.rows[0]);
     return result.rows[0];
+
   } catch (error) {
-    console.error('Error adding event to schedule:', error);
+    console.error('❌ Error adding event to schedule:', error);
+    console.error('❌ Error details:', error.message);
     throw error;
   }
 }
-  
+
+
 async function getUserSchedules(userId) {
   try {
     console.log(`📅 Getting schedules for user: ${userId}`);
@@ -459,6 +560,35 @@ async function getUserSchedules(userId) {
 }
 
 //MEMORY
+async function createMemoryCategory(userId, categoryName, categoryType = 'general', options = {}) {
+  try {
+    const { description, color, icon } = options;
+    
+    console.log(`🧠 Creating memory category "${categoryName}" for user ${userId}`);
+    
+    // Use direct SQL to create category
+    const result = await pool.query(`
+        INSERT INTO memory_categories (user_id, category_name, category_type, description, color, icon)
+        VALUES ($1, $2, $3, $4, $5, $6)
+        ON CONFLICT (user_id, category_name)
+        DO UPDATE SET 
+            category_type = EXCLUDED.category_type,
+            description = EXCLUDED.description,
+            color = EXCLUDED.color,
+            icon = EXCLUDED.icon,
+            updated_at = CURRENT_TIMESTAMP
+        RETURNING *
+    `, [userId, categoryName, categoryType, description, color, icon]);
+    
+    console.log(`✅ Created/updated memory category:`, result.rows[0]);
+    return result.rows[0];
+    
+  } catch (error) {
+      console.error('❌ Error creating memory category:', error);
+      throw error;
+  }
+}
+
 
 async function addMemoryItem(userId, categoryName, memoryKey, memoryValue, options = {}) {
   try {
@@ -514,7 +644,18 @@ async function addMemoryItem(userId, categoryName, memoryKey, memoryValue, optio
 
       console.log(`✅ Found matching category: "${targetCategoryName}" (ID: ${targetCategoryId})`);
 
-      // Insert into memory_items using the found category
+      // FIXED: Convert tags to TEXT format instead of JSON
+      const tagsText = Array.isArray(tags) 
+          ? tags.join(', ')  // Convert array to "tag1, tag2, tag3"
+          : (tags || '');    // Use as-is if string, or empty string if null/undefined
+
+      console.log('🏷️ Tags conversion:', {
+          original: tags,
+          converted: tagsText,
+          type: typeof tagsText
+      });
+
+      // FIXED: Use tagsText instead of JSON.stringify(tags)
       const result = await pool.query(`
           INSERT INTO memory_items (category_id, memory_key, memory_value, memory_type, importance, tags, expires_at, is_private)
           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
@@ -528,7 +669,7 @@ async function addMemoryItem(userId, categoryName, memoryKey, memoryValue, optio
               is_private = EXCLUDED.is_private,
               updated_at = CURRENT_TIMESTAMP
           RETURNING *
-      `, [targetCategoryId, memoryKey, memoryValue, memory_type, importance, JSON.stringify(tags), expires_at, is_private]);
+      `, [targetCategoryId, memoryKey, memoryValue, memory_type, importance, tagsText, expires_at, is_private]);
 
       console.log(`✅ Added memory item to existing category "${targetCategoryName}"`);
       return result.rows[0];
@@ -538,6 +679,7 @@ async function addMemoryItem(userId, categoryName, memoryKey, memoryValue, optio
       throw error;
   }
 }
+
   
 async function getUserMemories(userId) {
   try {
@@ -591,7 +733,8 @@ async function getUserMemories(userId) {
                 value: row.memory_value,
                 type: row.memory_type,
                 importance: row.importance,
-                tags: typeof row.tags === 'string' ? JSON.parse(row.tags) : (row.tags || []),
+                // FIXED: Parse tags as TEXT, not JSON
+                tags: row.tags ? row.tags.split(',').map(tag => tag.trim()) : [],
                 expires_at: row.expires_at,
                 is_private: row.is_private,
                 created: row.memory_created,
@@ -614,6 +757,7 @@ async function getUserMemories(userId) {
       return {};
   }
 }
+
 
 /* Get all User Data */
 
@@ -766,6 +910,7 @@ module.exports = {
     createUserSchedule,
     addEventToSchedule,
     getUserSchedules,
+    createMemoryCategory, 
     addMemoryItem,
     getUserMemories,
     getAllUserData, 
