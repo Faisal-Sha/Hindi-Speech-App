@@ -18,8 +18,7 @@ const useDataManagement = (messages = []) => { // Default empty array to prevent
     
     console.log(`🔍 Looking for ${itemType}: "${targetName}" in existing items:`, Object.keys(existingItems));
     
-    // Step 1: Try exact match 
-    // first (HIGHEST PRIORITY)
+    // Step 1: Try exact match (HIGHEST PRIORITY)
     if (existingItems[targetName]) {
       console.log(`✅ Found exact match: "${targetName}"`);
       return targetName;
@@ -62,6 +61,12 @@ const useDataManagement = (messages = []) => { // Default empty array to prevent
       if (itemType === 'list') {
         return findListByTypeForVagueRequest(targetName, existingItems);
       }
+      if (itemType === 'schedule') {
+        findScheduleByType(targetName, existingItems)
+      }
+      if (itemType === 'memory') {
+        findMemoryByCategory(targetName, existingItems)
+      }
     }
     
     // Step 5: No match found - return null to create new item
@@ -71,7 +76,6 @@ const useDataManagement = (messages = []) => { // Default empty array to prevent
   
   // Helper for list-specific matching (only for vague requests)
   const findListByTypeForVagueRequest = (targetName, existingLists) => {
-    // Only use type matching for very generic requests
     const targetLower = targetName.toLowerCase();
     const isGenericListRequest = ['list', 'the list', 'my list'].includes(targetLower);
     
@@ -79,7 +83,6 @@ const useDataManagement = (messages = []) => { // Default empty array to prevent
       return null; // Don't do type matching for specific names
     }
     
-    // For generic requests, find the most recently used list
     const listEntries = Object.entries(existingLists);
     if (listEntries.length > 0) {
       const mostRecent = listEntries.reduce((latest, [name, list]) => {

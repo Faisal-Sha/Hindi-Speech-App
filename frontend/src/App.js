@@ -54,10 +54,9 @@ function App() {
 
   const loadUserDataForUser = async (userId) => {
     try {
-      console.log(`📖 Loading data for user: ${userId}`);
-      await loadUserData(); // Your existing hook will handle this
+      await loadUserData(userId);   
     } catch (error) {
-      console.error('❌ Error loading user data:', error);
+      console.error('❌ Error in loadUserDataForUser:', error);
     }
   };
 
@@ -147,6 +146,14 @@ function App() {
         const data = await response.json();
         console.log(`📥 AI Response for ${currentUser.display_name}:`, data);
 
+        
+        if (data.actions) {
+          console.log('📋 data.actions.length:', data.actions.length);
+          console.log('📋 First action (if exists):', data.actions[0]);
+        } else {
+          console.log('❌ data.actions is falsy');
+        }
+  
         // Add AI response to conversation
         const aiMessage = {
           type: 'ai',
@@ -154,17 +161,23 @@ function App() {
           timestamp: new Date(),
           actions: data.actions || []
         };
-
+  
         setMessages(prev => [...prev, aiMessage]);
+  
+        // DEBUG: Enhanced action processing check
 
+  
         // Process any actions
         if (data.actions && data.actions.length > 0) {
           console.log(`⚡ Processing ${data.actions.length} actions for user ${currentUser.user_id}`);
           handleAiActions(data.actions);
           
           // Save data changes to backend
+          console.log('💾 About to call saveDataChanges...');
           await saveDataChanges(data.actions);
-        }
+          console.log('✅ saveDataChanges call completed');
+        } 
+         
       } else {
         throw new Error('Failed to get AI response');
       }
@@ -185,55 +198,38 @@ function App() {
   };
 
   const saveDataChanges = async (actions) => {
-    if (!currentUser) return;
-
     try {
-      for (const action of actions) {
-        let dataToSave = null;
-        let dataType = '';
-        let dataKey = '';
-
-        switch (action.type) {
-          case 'create_list':
-          case 'add_to_list':
-          case 'update_list':
-          case 'delete_list':
-            dataType = 'lists';
-            dataKey = action.data?.listName || action.data?.name;
-            dataToSave = userLists[dataKey];
-            break;
-            
-          case 'create_schedule':
-          case 'add_event':
-          case 'update_event':
-            dataType = 'schedules';
-            dataKey = action.data?.scheduleName || action.data?.name;
-            dataToSave = userSchedules[dataKey];
-            break;
-            
-          case 'create_memory':
-          case 'store_memory':
-          case 'update_memory':
-            dataType = 'memory';
-            dataKey = action.data?.categoryName || action.data?.category;
-            dataToSave = userMemory[dataKey];
-            break;
+      if (!currentUser || !actions.length) {
+        console.log('⚠️ No user or no actions to save');
+        return;
+      }
+      
+      console.log('💾 Saving data changes...');
+      console.log('👤 User:', currentUser.user_id);
+      console.log('📋 Actions:', actions);
+      
+      const response = await fetch('http://localhost:3001/save-data-enhanced', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: currentUser.user_id,
+          actions: actions
+        })
+      });
+  
+      if (response.ok) {
+        const result = await response.json();
+        console.log(`✅ Data save complete: ${result.successful}/${result.processed} actions successful`);
+        
+        if (result.failed > 0) {
+          console.warn(`⚠️ ${result.failed} actions failed:`, result.results.filter(r => !r.success));
         }
-
-        if (dataToSave && dataType && dataKey) {
-          console.log(`💾 Saving ${dataType}/${dataKey} for user ${currentUser.user_id}`);
-          
-          await fetch('http://localhost:3001/save-data', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              userId: currentUser.user_id,
-              dataType,
-              dataKey,
-              dataValue: dataToSave
-            })
-          });
-        }
+        
+        // Reload user data to ensure frontend is in sync with backend
+        await loadUserData(currentUser.user_id);
+        
+      } else {
+        console.error('❌ Failed to save data changes');
       }
     } catch (error) {
       console.error('❌ Error saving data changes:', error);
