@@ -14,6 +14,7 @@ const {
     createUserSchedule,
     addEventToSchedule,
     getUserSchedules,
+    createMemoryCategory,
     addMemoryItem,
     getUserMemories,
     getAllUserData, 
@@ -132,7 +133,150 @@ const SYSTEM_PROMPT = `You are an intelligent multilingual personal assistant. Y
     ❌ User says "add to shopping list" → DON'T create new "shopping list" if "Shopping List" exists
     ❌ User says "delete list" → DON'T delete without knowing which list
 
-    ✅ ALWAYS RESPECT USER'S EXPLICIT LIST CHOICE OVER CONTENT-BASED GUESSING
+
+    🗓️ SCHEDULE EVENT FORMAT:
+    For add_event, use this exact structure:
+    {
+      "type": "add_event",
+      "data": {
+        "scheduleName": "Monday",           // or whatever schedule name
+        "eventTitle": "Doctor Appointment", // REQUIRED - the event name
+        "startTime": "2025-07-20 14:30:00", // REQUIRED - when it happens
+        "endTime": "2025-07-20 15:30:00",   // Optional - when it ends
+        "location": "Medical Center",        // Optional - where it happens
+        "description": "Annual checkup"      // Optional - additional details
+      }
+    }
+
+    Example responses:
+    User: "I have a meeting tomorrow at 3 PM"
+    {
+      "response": "I've added your meeting to tomorrow's schedule!",
+      "actions": [{
+        "type": "add_event",
+        "data": {
+          "scheduleName": "Monday",
+          "eventTitle": "Meeting", 
+          "startTime": "2025-07-17 15:00:00"
+        }
+      }]
+    }
+
+
+    🧠 MEMORY MANAGEMENT FORMAT:
+
+    SMART MEMORY DETECTION:
+- "Remember that..." → store_memory
+- "Don't forget..." → store_memory  
+- "Note that..." → store_memory
+- "Keep in mind..." → store_memory
+- "John's phone is 555-1234" → store_memory
+- "My password for Gmail is xyz123" → store_memory
+- "Create contacts category" → create_memory
+
+
+    For create_memory (creating categories), use this structure:
+    {
+      "type": "create_memory",
+      "data": {
+        "category": "Contacts",        // REQUIRED - category name
+        "categoryType": "contacts"     // Optional - type of category
+      }
+    }
+
+    MEMORY EXAMPLES:
+    User: "Create a contacts category"
+    {
+      "response": "I've created a contacts category for you!",
+      "actions": [{
+        "type": "create_memory",
+        "data": {
+          "category": "Contacts",
+          "categoryType": "contacts"
+        }
+      }]
+    }
+
+    User: "Remember John's phone number is 555-1234"
+    {
+      "response": "I'll remember John's phone number for you!",
+      "actions": [{
+        "type": "store_memory",
+        "data": {
+          "category": "Contacts",
+          "memoryKey": "John Smith",
+          "memoryValue": "Phone: 555-1234"
+        }
+      }]
+    }
+
+    STORE_MEMORY FORMAT:
+{
+  "type": "store_memory",
+  "data": {
+    "category": "Contacts",           // Target category
+    "memoryKey": "John Smith",        // What to call this memory
+    "memoryValue": "555-1234"         // The actual information
+  }
+}
+
+EXAMPLES:
+User: "Remember John's phone number is 555-1234"
+{
+  "response": "I'll remember John's phone number!",
+  "actions": [{
+    "type": "store_memory",
+    "data": {
+      "category": "Contacts",
+      "memoryKey": "John Smith Phone",
+      "memoryValue": "555-1234"
+    }
+  }]
+}
+
+User: "My Gmail password is secretpass123"
+{
+  "response": "I've securely stored your Gmail password!",
+  "actions": [{
+    "type": "store_memory", 
+    "data": {
+      "category": "Passwords",
+      "memoryKey": "Gmail Password",
+      "memoryValue": "secretpass123"
+    }
+  }]
+}
+
+User: "Note that the meeting is moved to Friday"
+{
+  "response": "I've noted that the meeting is moved to Friday!",
+  "actions": [{
+    "type": "store_memory",
+    "data": {
+      "category": "Notes",
+      "memoryKey": "Meeting Update",
+      "memoryValue": "Meeting moved to Friday"
+    }
+  }]
+}
+
+AUTOMATIC CATEGORY DETECTION:
+- Phone numbers, emails, addresses → "Contacts" category
+- Passwords, PINs, codes → "Passwords" category  
+- General notes, reminders → "Notes" category
+- Important dates, anniversaries → "Dates" category
+- Work info, meeting notes → "Work" category
+
+SMART CONTENT PARSING:
+- "John's phone is 555-1234" → memoryKey: "John Phone", memoryValue: "555-1234"
+- "Remember my password is abc123" → memoryKey: "Password", memoryValue: "abc123"
+- "Note that Sarah likes chocolate" → memoryKey: "Sarah Preferences", memoryValue: "likes chocolate"
+- "Don't forget the meeting at 3pm" → memoryKey: "Meeting Reminder", memoryValue: "meeting at 3pm"
+
+CRITICAL: Always include both memoryKey AND memoryValue for store_memory actions!
+*/
+
+    ✅ ALWAYS RESPECT USER'S EXPLICIT CHOICE OVER CONTENT-BASED GUESSING
 
     🌍 LANGUAGE RESPONSE GUIDELINES:
     - Respond in the same language the user spoke
@@ -176,81 +320,150 @@ function extractListData(action) {
 }
 
 function extractScheduleData(action) {
-    console.log('🔍 Extracting schedule data from action:', action);
-    
-    const scheduleName = action.scheduleName ||
-                        action.schedule_name ||
-                        action.name ||
-                        action.data?.scheduleName ||
-                        action.data?.schedule_name ||
-                        action.data?.name ||
-                        action.data?.target ||
-                        null;
-    
-    const eventTitle = action.eventTitle ||
-                      action.event_title ||
-                      action.title ||
-                      action.data?.eventTitle ||
-                      action.data?.event_title ||
-                      action.data?.title ||
+  console.log('🔍 Extracting schedule data from action:', action);
+  console.log('🔍 Full action object:', JSON.stringify(action, null, 2));
+  
+  // ENHANCED: Look in many more places for the data
+  const scheduleName = action.scheduleName ||
+                      action.schedule_name ||
+                      action.name ||
+                      action.schedule ||
+                      action.target ||
+                      action.data?.scheduleName ||
+                      action.data?.schedule_name ||
+                      action.data?.name ||
+                      action.data?.schedule ||
+                      action.data?.target ||
                       null;
-    
-    const startTime = action.startTime ||
-                      action.start_time ||
-                      action.time ||
-                      action.data?.startTime ||
-                      action.data?.start_time ||
-                      action.data?.time ||
-                      null;
-    
-    const scheduleType = action.scheduleType ||
-                        action.schedule_type ||
-                        action.type ||
-                        action.data?.scheduleType ||
-                        action.data?.schedule_type ||
-                        action.data?.type ||
-                        'personal';
-    
-    console.log(`✅ Extracted schedule data - Name: "${scheduleName}", Event: "${eventTitle}", Time: "${startTime}"`);
-    
-    return { scheduleName, eventTitle, startTime, scheduleType };
+  
+  // ENHANCED: Look for event title in more places
+  const eventTitle = action.eventTitle ||
+                    action.event_title ||
+                    action.title ||
+                    action.event ||
+                    action.eventName ||
+                    action.data?.eventTitle ||
+                    action.data?.event_title ||
+                    action.data?.title ||
+                    action.data?.event ||
+                    action.data?.eventName ||
+                    null;
+  
+  // ENHANCED: Look for time in more places and handle different formats
+  const startTime = action.startTime ||
+                    action.start_time ||
+                    action.time ||
+                    action.when ||
+                    action.datetime ||
+                    action.data?.startTime ||
+                    action.data?.start_time ||
+                    action.data?.time ||
+                    action.data?.when ||
+                    action.data?.datetime ||
+                    null;
+  
+  const scheduleType = action.scheduleType ||
+                      action.schedule_type ||
+                      action.type ||
+                      action.data?.scheduleType ||
+                      action.data?.schedule_type ||
+                      action.data?.type ||
+                      'personal';
+  
+  console.log(`✅ Extracted schedule data:`, {
+      scheduleName, 
+      eventTitle, 
+      startTime, 
+      scheduleType
+  });
+  
+  return { scheduleName, eventTitle, startTime, scheduleType };
 }
 
 function extractMemoryData(action) {
-    console.log('🔍 Extracting memory data from action:', action);
-    
-    const category = action.category ||
-                    action.categoryName ||
-                    action.category_name ||
-                    action.name ||
-                    action.data?.category ||
-                    action.data?.categoryName ||
-                    action.data?.category_name ||
-                    action.data?.name ||
-                    'General';
-    
-    const memoryKey = action.key ||
-                      action.memory_key ||
-                      action.title ||
-                      action.data?.key ||
-                      action.data?.memory_key ||
-                      action.data?.title ||
-                      action.info ||
-                      action.data?.info ||
-                      `Memory_${Date.now()}`;
-    
-    const memoryValue = action.value ||
-                        action.content ||
-                        action.info ||
-                        action.data?.value ||
-                        action.data?.content ||
-                        action.data?.info ||
-                        null;
-    
-    console.log(`✅ Extracted memory data - Category: "${category}", Key: "${memoryKey}", Value exists: ${!!memoryValue}`);
-    
-    return { category, memoryKey, memoryValue };
+  console.log('🔍 Extracting memory data from action:', action);
+  console.log('🔍 Full action object:', JSON.stringify(action, null, 2));
+  
+  // ENHANCED: Look in many more places for category name
+  const category = action.category ||
+                  action.categoryName ||
+                  action.category_name ||
+                  action.name ||
+                  action.title ||
+                  action.target ||
+                  action.data?.category ||
+                  action.data?.categoryName ||
+                  action.data?.category_name ||
+                  action.data?.name ||
+                  action.data?.title ||
+                  action.data?.target ||
+                  'General';  // Default fallback
+  
+  // ENHANCED: Look for memory key in many more places
+  const memoryKey = action.memoryKey ||
+                   action.memory_key ||
+                   action.key ||
+                   action.topic ||
+                   action.subject ||
+                   action.title ||
+                   action.name ||
+                   action.about ||
+                   action.data?.memoryKey ||
+                   action.data?.memory_key ||
+                   action.data?.key ||
+                   action.data?.topic ||
+                   action.data?.subject ||
+                   action.data?.title ||
+                   action.data?.name ||
+                   action.data?.about ||
+                   `Memory_${Date.now()}`;  // Auto-generate if not found
+  
+  // ENHANCED: Look for memory value/content in many more places
+  const memoryValue = action.memoryValue ||
+                     action.memory_value ||
+                     action.value ||
+                     action.content ||
+                     action.info ||
+                     action.information ||
+                     action.details ||
+                     action.text ||
+                     action.description ||
+                     action.message ||
+                     action.note ||
+                     action.data?.memoryValue ||
+                     action.data?.memory_value ||
+                     action.data?.value ||
+                     action.data?.content ||
+                     action.data?.info ||
+                     action.data?.information ||
+                     action.data?.details ||
+                     action.data?.text ||
+                     action.data?.description ||
+                     action.data?.message ||
+                     action.data?.note ||
+                     // SMART FALLBACK: Try to extract from the entire action if specific fields not found
+                     (typeof action === 'string' ? action : null) ||
+                     (action.data && typeof action.data === 'string' ? action.data : null) ||
+                     null;
+  
+  const categoryType = action.categoryType ||
+                      action.category_type ||
+                      action.type ||
+                      action.data?.categoryType ||
+                      action.data?.category_type ||
+                      action.data?.type ||
+                      'general';
+  
+  console.log(`✅ Extracted memory data:`, {
+      category, 
+      memoryKey, 
+      memoryValue: memoryValue ? `"${memoryValue.substring(0, 50)}..."` : 'null',
+      categoryType
+  });
+  
+  return { category, memoryKey, memoryValue, categoryType };
 }
+
 
 async function processAIActions(userId, actions) {
     const results = [];
@@ -408,18 +621,15 @@ async function processAIActions(userId, actions) {
                   throw new Error('Category name is required for create_memory');
               }
               
-              // For create_memory, we just create a category marker
-              // The actual memory item creation happens in store_memory
-              await addMemoryItem(
+              // Create the memory category (not an item!)
+              await createMemoryCategory(
                   userId,
                   createMemoryData.category,
-                  'category_created',
-                  `Category "${createMemoryData.category}" created`,
+                  createMemoryData.categoryType || 'general',
                   {
-                      memory_type: 'system',
-                      importance: 0,
-                      tags: ['category'],
-                      is_private: false
+                      description: action.description || action.data?.description,
+                      color: action.color || action.data?.color,
+                      icon: action.icon || action.data?.icon
                   }
               );
               
