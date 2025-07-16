@@ -142,6 +142,116 @@ const SYSTEM_PROMPT = `You are an intelligent multilingual personal assistant. Y
     ALWAYS return valid JSON. PRIORITIZE user's explicit list naming over intelligent content guessing.`;
 
 
+function extractListData(action) {
+  console.log('🔍 Extracting list data from action:', action);
+  
+  // Try all possible locations for list data (just like create_user_list fix)
+  const listName = action.listName || 
+                  action.list_name ||
+                  action.name ||
+                  action.data?.listName ||
+                  action.data?.list_name ||
+                  action.data?.name ||
+                  action.data?.targetList ||
+                  action.data?.target ||
+                  null;
+  
+  const items = action.items ||
+                action.data?.items ||
+                (action.item ? [action.item] : []) ||
+                (action.data?.item ? [action.data.item] : []) ||
+                [];
+  
+  const listType = action.listType ||
+                  action.list_type ||
+                  action.type ||
+                  action.data?.listType ||
+                  action.data?.list_type ||
+                  action.data?.type ||
+                  'general';
+  
+  console.log(`✅ Extracted list data - Name: "${listName}", Items: ${items.length}, Type: "${listType}"`);
+  
+  return { listName, items, listType };
+}
+
+function extractScheduleData(action) {
+    console.log('🔍 Extracting schedule data from action:', action);
+    
+    const scheduleName = action.scheduleName ||
+                        action.schedule_name ||
+                        action.name ||
+                        action.data?.scheduleName ||
+                        action.data?.schedule_name ||
+                        action.data?.name ||
+                        action.data?.target ||
+                        null;
+    
+    const eventTitle = action.eventTitle ||
+                      action.event_title ||
+                      action.title ||
+                      action.data?.eventTitle ||
+                      action.data?.event_title ||
+                      action.data?.title ||
+                      null;
+    
+    const startTime = action.startTime ||
+                      action.start_time ||
+                      action.time ||
+                      action.data?.startTime ||
+                      action.data?.start_time ||
+                      action.data?.time ||
+                      null;
+    
+    const scheduleType = action.scheduleType ||
+                        action.schedule_type ||
+                        action.type ||
+                        action.data?.scheduleType ||
+                        action.data?.schedule_type ||
+                        action.data?.type ||
+                        'personal';
+    
+    console.log(`✅ Extracted schedule data - Name: "${scheduleName}", Event: "${eventTitle}", Time: "${startTime}"`);
+    
+    return { scheduleName, eventTitle, startTime, scheduleType };
+}
+
+function extractMemoryData(action) {
+    console.log('🔍 Extracting memory data from action:', action);
+    
+    const category = action.category ||
+                    action.categoryName ||
+                    action.category_name ||
+                    action.name ||
+                    action.data?.category ||
+                    action.data?.categoryName ||
+                    action.data?.category_name ||
+                    action.data?.name ||
+                    'General';
+    
+    const memoryKey = action.key ||
+                      action.memory_key ||
+                      action.title ||
+                      action.data?.key ||
+                      action.data?.memory_key ||
+                      action.data?.title ||
+                      action.info ||
+                      action.data?.info ||
+                      `Memory_${Date.now()}`;
+    
+    const memoryValue = action.value ||
+                        action.content ||
+                        action.info ||
+                        action.data?.value ||
+                        action.data?.content ||
+                        action.data?.info ||
+                        null;
+    
+    console.log(`✅ Extracted memory data - Category: "${category}", Key: "${memoryKey}", Value exists: ${!!memoryValue}`);
+    
+    return { category, memoryKey, memoryValue };
+}
+
 async function processAIActions(userId, actions) {
     const results = [];
 
@@ -150,160 +260,208 @@ async function processAIActions(userId, actions) {
         console.log(`⚡ Processing action: ${action.type}`, action);
         
         switch (action.type) {
-            case 'create_list':
-              const listName = action.name || 
-                              action.list_name ||
-                              action.listName ||
-                              action.data?.name || 
-                              action.data?.list_name || 
-                              action.data?.listName ||
-                              action.title ||
-                              `List_${Date.now()}`;  // Ultimate fallback
-              
-              // Extract list type
-              const listType = action.list_type || 
-                              action.data?.list_type || 
-                              action.data?.type || 
-                              'general';
-
-              const newList = await createUserList(
+          case 'create_list':
+            console.log('📝 Creating new list...');
+            const createListData = extractListData(action);
+            if (!createListData.listName) {
+                throw new Error('List name is required for create_list');
+            }
+                  
+            await createUserList(
                 userId, 
-                listName.trim(),
-                listType,
+                createListData.listName, 
+                createListData.listType,
                 {
                     description: action.description || action.data?.description,
                     color: action.color || action.data?.color,
                     icon: action.icon || action.data?.icon
                 }
-              );
-              results.push({ success: true, type: 'create_list', data: newList });
-              break;
+            );
+
+            if (createListData.items.length > 0) {
+                for (const item of createListData.items) {
+                    await addItemToList(userId, createListData.listName, item);
+                }
+            }
+            
+            results.push({ 
+                success: true, 
+                type: 'create_list', 
+                data: { 
+                    listName: createListData.listName,
+                    itemsAdded: createListData.items.length 
+                } 
+            });
+            break;
+
             
             case 'add_to_list':
-              const targetListName = action.list_name || 
-                action.listName ||
-                action.data?.list_name || 
-                action.data?.listName ||
-                action.data?.targetList ||
-                'General List';
-
-              const itemText = action.item || 
-                      action.text ||
-                      action.data?.item || 
-                      action.data?.text ||
-                      'New item';
-
-              console.log(`➕ Adding "${itemText}" to list "${targetListName}"`);
-
-              const newItem = await addItemToList(
-                userId,
-                targetListName,
-                itemText,
-                {
-                  priority: action.priority || action.data?.priority,
-                  due_date: action.due_date || action.data?.due_date,
-                  notes: action.notes || action.data?.notes,
-                  quantity: action.quantity || action.data?.quantity
-                }
-                );
-              results.push({ success: true, type: 'add_to_list', data: newItem });
+              console.log('➕ Adding items to existing list...');
+              const addListData = extractListData(action);
+              if (!addListData.listName) {
+                  throw new Error('List name is required for add_to_list');
+              }
+              if (addListData.items.length === 0) {
+                  throw new Error('Items are required for add_to_list');
+              }
+              
+              // Add each item to the list
+              for (const item of addListData.items) {
+                  await addItemToList(
+                      userId, 
+                      addListData.listName, 
+                      typeof item === 'string' ? item : item.text || JSON.stringify(item),
+                      {
+                          priority: item.priority || 0,
+                          due_date: item.dueDate || item.due_date,
+                          notes: item.notes,
+                          quantity: item.quantity || 1
+                      }
+                  );
+              }
+              
+              results.push({ 
+                  success: true, 
+                  type: 'add_to_list', 
+                  data: { 
+                      listName: addListData.listName,
+                      itemsAdded: addListData.items.length 
+                  } 
+              });
               break;
             
             case 'create_schedule':
-              const scheduleName = action.name || 
-              action.schedule_name ||
-              action.data?.name || 
-              action.data?.schedule_name ||
-              action.title ||
-              'Personal Schedule';
-
-              const scheduleType = action.schedule_type || 
-                            action.data?.schedule_type || 
-                            action.data?.type || 
-                            'personal';
-
-              console.log(`📅 Creating schedule: "${scheduleName}"`);
-
-              const newSchedule = await createUserSchedule(
-              userId,
-              scheduleName,
-              scheduleType,
-              {
-                description: action.description || action.data?.description,
-                color: action.color || action.data?.color,
-                timezone: action.timezone || action.data?.timezone
+              console.log('📅 Creating new schedule...');
+              const createScheduleData = extractScheduleData(action);
+              
+              if (!createScheduleData.scheduleName) {
+                  throw new Error('Schedule name is required for create_schedule');
               }
-              );
-              results.push({ success: true, type: 'create_schedule', data: newSchedule });
-              break;
-            
-            case 'add_event':
-              const eventScheduleName = action.schedule_name || 
-                                             action.data?.schedule_name ||
-                                             'Personal';
-                    
-              const eventTitle = action.title || 
-                                action.event_title ||
-                                action.data?.title ||
-                                action.data?.event_title ||
-                                'New Event';
               
-              console.log(`📆 Adding event "${eventTitle}" to schedule "${eventScheduleName}"`);
-              
-              const newEvent = await addEventToSchedule(
+              // Create the schedule
+              await createUserSchedule(
                   userId,
-                  eventScheduleName,
-                  eventTitle,
-                  action.start_time || action.data?.start_time,
+                  createScheduleData.scheduleName,
+                  createScheduleData.scheduleType,
                   {
-                      end_time: action.end_time || action.data?.end_time,
-                      location: action.location || action.data?.location,
-                      event_description: action.description || action.data?.description,
-                      event_type: action.event_type || action.data?.event_type,
-                      is_all_day: action.is_all_day || action.data?.is_all_day,
-                      reminder_minutes: action.reminder_minutes || action.data?.reminder_minutes
+                      description: action.description || action.data?.description,
+                      color: action.color || action.data?.color,
+                      timezone: action.timezone || action.data?.timezone || 'UTC'
                   }
               );
-              results.push({ success: true, type: 'add_event', data: newEvent });
+              
+              results.push({ 
+                  success: true, 
+                  type: 'create_schedule', 
+                  data: { scheduleName: createScheduleData.scheduleName } 
+              });
+              break;
+
+            
+            case 'add_event':
+              console.log('📆 Adding event to schedule...');
+              const addEventData = extractScheduleData(action);
+              
+              if (!addEventData.scheduleName) {
+                  throw new Error('Schedule name is required for add_event');
+              }
+              
+              if (!addEventData.eventTitle) {
+                  throw new Error('Event title is required for add_event');
+              }
+              
+              if (!addEventData.startTime) {
+                  throw new Error('Start time is required for add_event');
+              }
+              
+              // Add the event
+              await addEventToSchedule(
+                  userId,
+                  addEventData.scheduleName,
+                  addEventData.eventTitle,
+                  addEventData.startTime,
+                  {
+                      end_time: action.endTime || action.end_time || action.data?.endTime || action.data?.end_time,
+                      location: action.location || action.data?.location,
+                      event_description: action.description || action.data?.description,
+                      event_type: action.eventType || action.event_type || action.data?.eventType || action.data?.event_type || 'appointment',
+                      is_all_day: action.isAllDay || action.is_all_day || action.data?.isAllDay || action.data?.is_all_day || false,
+                      reminder_minutes: action.reminderMinutes || action.reminder_minutes || action.data?.reminderMinutes || action.data?.reminder_minutes
+                  }
+              );
+              
+              results.push({ 
+                  success: true, 
+                  type: 'add_event', 
+                  data: { 
+                      scheduleName: addEventData.scheduleName,
+                      eventTitle: addEventData.eventTitle 
+                  } 
+              });
               break;
             
             case 'create_memory':
-            case 'store_memory':
-              const categoryName = action.category || 
-              action.category_name ||
-              action.data?.category ||
-              action.data?.category_name ||
-              'General';
-
-              const memoryKey = action.key || 
-                        action.memory_key ||
-                        action.data?.key ||
-                        action.data?.memory_key ||
-                        action.info ||
-                        `Memory_${Date.now()}`;
-
-              const memoryValue = action.value || 
-                          action.content ||
-                          action.data?.value ||
-                          action.data?.content;
-
-              console.log(`🧠 Storing memory: "${memoryKey}" in category "${categoryName}"`);
-
-              const newMemory = await addMemoryItem(
-              userId,
-              categoryName,
-              memoryKey,
-              memoryValue,
-              {
-                memory_type: action.memory_type || action.data?.memory_type || 'fact',
-                importance: action.importance || action.data?.importance || 0,
-                tags: action.tags || action.data?.tags || [],
-                expires_at: action.expires_at || action.data?.expires_at,
-                is_private: action.is_private || action.data?.is_private || false
+              console.log('🧠 Creating memory category...');
+              const createMemoryData = extractMemoryData(action);
+              
+              if (!createMemoryData.category) {
+                  throw new Error('Category name is required for create_memory');
               }
+              
+              // For create_memory, we just create a category marker
+              // The actual memory item creation happens in store_memory
+              await addMemoryItem(
+                  userId,
+                  createMemoryData.category,
+                  'category_created',
+                  `Category "${createMemoryData.category}" created`,
+                  {
+                      memory_type: 'system',
+                      importance: 0,
+                      tags: ['category'],
+                      is_private: false
+                  }
               );
-            results.push({ success: true, type: 'store_memory', data: newMemory });
-            break;
+              
+              results.push({ 
+                  success: true, 
+                  type: 'create_memory', 
+                  data: { category: createMemoryData.category } 
+              });
+              break;
+
+            case 'store_memory':
+              console.log('🧠 Storing memory...');
+              const storeMemoryData = extractMemoryData(action);
+              
+              if (!storeMemoryData.memoryValue) {
+                  throw new Error('Memory value is required for store_memory');
+              }
+              
+              // Store the memory
+              await addMemoryItem(
+                  userId,
+                  storeMemoryData.category,
+                  storeMemoryData.memoryKey,
+                  storeMemoryData.memoryValue,
+                  {
+                      memory_type: action.memory_type || action.data?.memory_type || 'fact',
+                      importance: action.importance || action.data?.importance || 0,
+                      tags: action.tags || action.data?.tags || [],
+                      expires_at: action.expires_at || action.data?.expires_at,
+                      is_private: action.is_private || action.data?.is_private || false
+                  }
+              );
+              
+              results.push({ 
+                  success: true, 
+                  type: 'store_memory', 
+                  data: { 
+                      category: storeMemoryData.category,
+                      key: storeMemoryData.memoryKey 
+                  } 
+              });
+              break;
             
             default:
             console.log(`❓ Unknown action type: ${action.type}`);
@@ -815,14 +973,11 @@ router.post('/chat', async (req, res) => {
       
       console.log(`🌍 Using language: ${effectiveLanguage} (user preference: ${userProfile?.preferred_language})`);
   
-      // Build intelligent context
-      const { context: smartContext, mergedData, dataSummary } = await buildSmartContext(
-        userId, mode, context || {}, message
-      );
+      const { context: smartContext } = await buildSmartContext(userId, mode, context || {}, message);
+
   
       const contextSize = smartContext.length;
       console.log(`🧠 Smart context: ${contextSize} chars`);
-      console.log(`💾 Persistent data: ${dataSummary.lists.count} lists, ${dataSummary.schedules.count} schedules, ${dataSummary.memory.count} memory`);
   
       // Enhanced system prompt with user context
       const enhancedSystemPrompt = `You are an intelligent multilingual personal assistant for ${userProfile?.display_name || userId}. 
