@@ -32,7 +32,7 @@ const Header = ({
     const titles = {
       'en-US': {
         main: 'Personal AI Assistant',
-        subtitle: 'व्यक्तिगत एआई सहायक',
+        subtitle: 'Ready to Help',
         tagline: 'Your intelligent companion for productivity!'
       },
       'hi-IN': {

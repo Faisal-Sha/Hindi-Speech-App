@@ -217,26 +217,7 @@ function App() {
         });
       });
 
-      const validActions = actions.filter(action => {
-        if (!action.type) {
-          console.error('❌ [DEBUG] Action missing type:', action);
-          return false;
-        }
-        if (action.type === 'store_memory' && !action.data) {
-          console.error('❌ [DEBUG] store_memory action missing data:', action);
-          return false;
-        }
-        return true;
-      });
-      console.log(`📋 [DEBUG] Sending ${validActions.length}/${actions.length} valid actions`);
-    
-    const requestBody = {
-      userId: currentUser.user_id,
-      actions: validActions
-    };
-    
-    console.log('📋 [DEBUG] Request body:', JSON.stringify(requestBody, null, 2));
-    
+      
       const response = await fetch('http://localhost:3001/save-data-enhanced', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -431,7 +412,7 @@ function App() {
         <div className="voice-controls">
           <button
             onClick={isListening ? stopListening : startListening}
-            className={`voice-button ${isListening ? 'listening' : ''}`}
+            className={`btn ${isListening ? 'recording' : ''}`}
             disabled={isAILoading}
           >
             {isListening ? '🔴 Stop' : '🎤 Start'} Voice
