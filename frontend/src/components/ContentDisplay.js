@@ -9,6 +9,33 @@ const ContentDisplay = ({
   isDataLoading 
 }) => {
 
+  // Helper function to safely format dates
+  const formatDate = (dateInput) => {
+    if (!dateInput) return 'recently';
+    
+    try {
+      // If it's already a Date object, use it directly
+      if (dateInput instanceof Date) {
+        return dateInput.toLocaleDateString();
+      }
+      
+      // If it's a string, try to convert it to a Date
+      if (typeof dateInput === 'string') {
+        const date = new Date(dateInput);
+        // Check if the date is valid
+        if (!isNaN(date.getTime())) {
+          return date.toLocaleDateString();
+        }
+      }
+      
+      // If we can't parse it, return a fallback
+      return 'recently';
+    } catch (error) {
+      console.warn('Error formatting date:', dateInput, error);
+      return 'recently';
+    }
+  };
+
   // Simple collapsible section component - no need for separate file
   const CollapsibleSection = ({ title, count, subtitle, children, defaultExpanded = false }) => {
     const [isExpanded, setIsExpanded] = useState(defaultExpanded);
@@ -100,7 +127,7 @@ const ContentDisplay = ({
                 </div>
                 <div className="message-text">{msg.text}</div>
                 <div className="message-time">
-                  {msg.timestamp?.toLocaleTimeString()}
+                  {msg.timestamp ? formatDate(msg.timestamp) : ''}
                 </div>
                 {msg.actions && msg.actions.length > 0 && (
                   <div className="message-actions">
@@ -131,7 +158,7 @@ const ContentDisplay = ({
                 key={listId}
                 title={`📝 ${list.name || list.title || listId}`}
                 count={list.items?.length || 0}
-                subtitle={`Created ${list.created?.toLocaleDateString() || 'recently'}`}
+                subtitle={`Created ${formatDate(list.created)}`}
                 defaultExpanded={true}
               >
                 {!list.items || list.items.length === 0 ? (
@@ -176,7 +203,7 @@ const ContentDisplay = ({
                 key={scheduleId}
                 title={`📅 ${schedule.name || scheduleId}`}
                 count={schedule.events?.length || 0}
-                subtitle={`Created ${schedule.created?.toLocaleDateString() || 'recently'}`}
+                subtitle={`Created ${formatDate(schedule.created)}`}
                 defaultExpanded={true}
               >
                 {!schedule.events || schedule.events.length === 0 ? (
@@ -184,19 +211,20 @@ const ContentDisplay = ({
                     No events scheduled. Add events by saying "I have a meeting tomorrow at 3 PM"
                   </div>
                 ) : (
-                  <div className="schedule-events">
+                  <div className="schedule-items">
                     {schedule.events.map((event, index) => (
-                      <div key={index} className="schedule-event">
-                        <div className="schedule-event-title">
-                          📅 {event.title}
+                      <div key={index} className="schedule-item">
+                        <div className="schedule-item-title">
+                          {typeof event === 'string' ? event : event.title || event.name || 'Untitled Event'}
                         </div>
-                        <div className="schedule-event-time">
-                          🕐 {event.time}
-                          {event.duration && ` (${event.duration})`}
-                        </div>
-                        {event.location && (
-                          <div className="schedule-event-location">
-                            📍 {event.location}
+                        {event.time && (
+                          <div className="schedule-item-time">
+                            📅 {typeof event.time === 'string' ? event.time : formatDate(event.time)}
+                          </div>
+                        )}
+                        {event.description && (
+                          <div className="schedule-item-description">
+                            {event.description}
                           </div>
                         )}
                       </div>
@@ -221,13 +249,13 @@ const ContentDisplay = ({
           <EmptyState mode="memory" />
         ) : (
           <>
-            <h3 className="content-title">🧠 Memory Bank</h3>
+            <h3 className="content-title">🧠 Your Memory</h3>
             {Object.entries(userMemory).map(([categoryId, category]) => (
               <CollapsibleSection
                 key={categoryId}
-                title={`🧠 ${category.category || category.name || categoryId}`}
+                title={`🧠 ${category.name || categoryId}`}
                 count={category.items?.length || 0}
-                subtitle={`Updated ${category.updated?.toLocaleDateString() || 'recently'}`}
+                subtitle={`Created ${formatDate(category.created)}`}
                 defaultExpanded={true}
               >
                 {!category.items || category.items.length === 0 ? (
