@@ -589,34 +589,51 @@ async function createMemoryCategory(userId, categoryName, categoryType = 'genera
   }
 }
 
-
 async function addMemoryItem(userId, categoryName, memoryKey, memoryValue, options = {}) {
+  console.log('🔍 [DEEP DEBUG] === ADD MEMORY ITEM START ===');
+  console.log('🔍 [DEEP DEBUG] Input parameters:', {
+    userId: userId,
+    categoryName: categoryName,
+    memoryKey: memoryKey,
+    memoryValue: memoryValue,
+    options: options
+  });
+  
   try {
-      const { 
-          memory_type = 'fact', 
-          importance = 0, 
-          tags = [], 
-          expires_at,
-          is_private = false 
-      } = options;
+      // FIXED: Use proper PostgreSQL array format for tags
+      const memory_type = 'fact';
+      const importance = 0;
+      const expires_at = null;
+      const is_private = false;
+      const tagsArray = []; // Use actual empty array, not string
+      
+      console.log('🔍 [DEEP DEBUG] Using safe defaults:', {
+        memory_type,
+        importance,
+        expires_at,
+        is_private,
+        tagsArray,
+        tagsArrayType: typeof tagsArray
+      });
 
-      console.log(`🧠 Adding memory item: ${memoryKey} to category: ${categoryName}`);
-
-      // Get existing categories (like getUserLists does)
+      console.log(`🔍 [DEEP DEBUG] Step 1: Finding category "${categoryName}"...`);
+      
+      // Get existing categories
       const categoriesResult = await pool.query(
           'SELECT id, category_name FROM memory_categories WHERE user_id = $1',
           [userId]
       );
+      
+      console.log('🔍 [DEEP DEBUG] Found categories:', categoriesResult.rows);
 
       if (categoriesResult.rows.length === 0) {
           throw new Error(`No memory categories exist. Please create a category first.`);
       }
 
-      // Smart matching logic (same as lists)
+      // Find matching category
       let targetCategoryId = null;
       let targetCategoryName = null;
 
-      // Try exact match first
       const exactMatch = categoriesResult.rows.find(cat => 
           cat.category_name.toLowerCase() === categoryName.toLowerCase()
       );
@@ -624,8 +641,9 @@ async function addMemoryItem(userId, categoryName, memoryKey, memoryValue, optio
       if (exactMatch) {
           targetCategoryId = exactMatch.id;
           targetCategoryName = exactMatch.category_name;
+          console.log('🔍 [DEEP DEBUG] Found exact match:', { targetCategoryId, targetCategoryName });
       } else {
-          // Try partial matching (like list smart matching)
+          console.log('🔍 [DEEP DEBUG] No exact match, trying partial...');
           const partialMatch = categoriesResult.rows.find(cat => 
               cat.category_name.toLowerCase().includes(categoryName.toLowerCase()) ||
               categoryName.toLowerCase().includes(cat.category_name.toLowerCase())
@@ -634,6 +652,7 @@ async function addMemoryItem(userId, categoryName, memoryKey, memoryValue, optio
           if (partialMatch) {
               targetCategoryId = partialMatch.id;
               targetCategoryName = partialMatch.category_name;
+              console.log('🔍 [DEEP DEBUG] Found partial match:', { targetCategoryId, targetCategoryName });
           }
       }
 
@@ -642,44 +661,45 @@ async function addMemoryItem(userId, categoryName, memoryKey, memoryValue, optio
           throw new Error(`Category "${categoryName}" not found. Available categories: ${availableCategories}`);
       }
 
-      console.log(`✅ Found matching category: "${targetCategoryName}" (ID: ${targetCategoryId})`);
-
-      // FIXED: Convert tags to TEXT format instead of JSON
-      const tagsText = Array.isArray(tags) 
-          ? tags.join(', ')  // Convert array to "tag1, tag2, tag3"
-          : (tags || '');    // Use as-is if string, or empty string if null/undefined
-
-      console.log('🏷️ Tags conversion:', {
-          original: tags,
-          converted: tagsText,
-          type: typeof tagsText
-      });
-
-      // FIXED: Use tagsText instead of JSON.stringify(tags)
-      const result = await pool.query(`
+      console.log('🔍 [DEEP DEBUG] Step 2: Preparing SQL query...');
+      
+      // FIXED: Use array format for PostgreSQL tags column
+      const queryParams = [targetCategoryId, memoryKey, memoryValue, memory_type, importance, tagsArray, expires_at, is_private];
+      console.log('🔍 [DEEP DEBUG] Query parameters:', queryParams);
+      console.log('🔍 [DEEP DEBUG] Parameter types:', queryParams.map(p => typeof p));
+      console.log('🔍 [DEEP DEBUG] Tags parameter:', tagsArray, 'Is Array:', Array.isArray(tagsArray));
+      
+      const sqlQuery = `
           INSERT INTO memory_items (category_id, memory_key, memory_value, memory_type, importance, tags, expires_at, is_private)
           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
           ON CONFLICT (category_id, memory_key)
           DO UPDATE SET 
               memory_value = EXCLUDED.memory_value,
-              memory_type = EXCLUDED.memory_type,
-              importance = EXCLUDED.importance,
-              tags = EXCLUDED.tags,
-              expires_at = EXCLUDED.expires_at,
-              is_private = EXCLUDED.is_private,
               updated_at = CURRENT_TIMESTAMP
           RETURNING *
-      `, [targetCategoryId, memoryKey, memoryValue, memory_type, importance, tagsText, expires_at, is_private]);
-
-      console.log(`✅ Added memory item to existing category "${targetCategoryName}"`);
+      `;
+      
+      console.log('🔍 [DEEP DEBUG] SQL Query:', sqlQuery);
+      console.log('🔍 [DEEP DEBUG] Step 3: Executing query...');
+      
+      const result = await pool.query(sqlQuery, queryParams);
+      
+      console.log('🔍 [DEEP DEBUG] Query executed successfully');
+      console.log('🔍 [DEEP DEBUG] Result:', result.rows[0]);
+      console.log('🔍 [DEEP DEBUG] === ADD MEMORY ITEM SUCCESS ===');
+      
       return result.rows[0];
 
   } catch (error) {
-      console.error('❌ Error adding memory item:', error);
+      console.error('🔍 [DEEP DEBUG] === ADD MEMORY ITEM FAILED ===');
+      console.error('🔍 [DEEP DEBUG] Error message:', error.message);
+      console.error('🔍 [DEEP DEBUG] Error code:', error.code);
+      console.error('🔍 [DEEP DEBUG] Error detail:', error.detail);
+      console.error('🔍 [DEEP DEBUG] Error hint:', error.hint);
+      console.error('🔍 [DEEP DEBUG] Error position:', error.position);
       throw error;
   }
 }
-
   
 async function getUserMemories(userId) {
   try {
@@ -705,59 +725,64 @@ async function getUserMemories(userId) {
         LEFT JOIN memory_items mi ON mc.id = mi.category_id
         WHERE mc.user_id = $1
         AND (mi.expires_at IS NULL OR mi.expires_at > CURRENT_TIMESTAMP)
-        ORDER BY mc.category_name, mi.importance DESC, mi.created_at DESC
+        ORDER BY mc.category_name, mi.created_at DESC
     `, [userId]);
 
     console.log(`🧠 Raw memory data from your tables:`, result.rows);
 
-    // Transform to object format grouped by category
+    // Group by category
     const memoriesObject = {};
+    
     result.rows.forEach(row => {
         const categoryName = row.category_name;
-
-        // Initialize category if it doesn't exist
+        
         if (!memoriesObject[categoryName]) {
             memoriesObject[categoryName] = {
-                category: categoryName,
+                name: categoryName,
                 items: [],
                 created: row.category_created,
                 lastUpdated: row.category_updated
             };
         }
-
-        // Add memory item to category (only if it exists)
+        
+        // Only add memory item if it exists (LEFT JOIN might return null)
         if (row.memory_id) {
+            // FIXED: Handle tags properly - check if it's array or string
+            let processedTags;
+            if (Array.isArray(row.tags)) {
+                processedTags = row.tags; // Already an array
+            } else if (typeof row.tags === 'string' && row.tags.includes(',')) {
+                processedTags = row.tags.split(',').map(tag => tag.trim());
+            } else if (typeof row.tags === 'string' && row.tags.length > 0) {
+                processedTags = [row.tags]; // Single tag as array
+            } else {
+                processedTags = []; // Empty array for null/undefined/empty
+            }
+            
             memoriesObject[categoryName].items.push({
                 id: row.memory_id,
                 key: row.memory_key,
                 value: row.memory_value,
                 type: row.memory_type,
                 importance: row.importance,
-                // FIXED: Parse tags as TEXT, not JSON
-                tags: row.tags ? row.tags.split(',').map(tag => tag.trim()) : [],
-                expires_at: row.expires_at,
-                is_private: row.is_private,
+                tags: processedTags, // Use processed tags
+                expiresAt: row.expires_at,
+                isPrivate: row.is_private,
                 created: row.memory_created,
-                updated: row.memory_updated
+                lastUpdated: row.memory_updated
             });
-
-            // Update category's lastUpdated to the most recent item
-            if (new Date(row.memory_updated) > new Date(memoriesObject[categoryName].lastUpdated)) {
-                memoriesObject[categoryName].lastUpdated = row.memory_updated;
-            }
         }
     });
-
-    console.log(`✅ Transformed memories object:`, memoriesObject);
+    
+    console.log(`✅ Processed memories for user ${userId}:`, memoriesObject);
     return memoriesObject;
-
+    
   } catch (error) {
-      console.error('❌ Error getting user memories:', error);
-      console.error('❌ Error details:', error.message);
-      return {};
+    console.error('❌ Error getting user memories:', error);
+    console.error('❌ Error details:', error.message);
+    return {};
   }
 }
-
 
 /* Get all User Data */
 

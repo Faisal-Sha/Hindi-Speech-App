@@ -208,6 +208,35 @@ function App() {
       console.log('👤 User:', currentUser.user_id);
       console.log('📋 Actions:', actions);
       
+      actions.forEach((action, index) => {
+        console.log(`📋 [DEBUG] Action ${index + 1}:`, {
+          type: action.type,
+          data: action.data,
+          dataType: typeof action.data,
+          dataKeys: action.data ? Object.keys(action.data) : 'no data'
+        });
+      });
+
+      const validActions = actions.filter(action => {
+        if (!action.type) {
+          console.error('❌ [DEBUG] Action missing type:', action);
+          return false;
+        }
+        if (action.type === 'store_memory' && !action.data) {
+          console.error('❌ [DEBUG] store_memory action missing data:', action);
+          return false;
+        }
+        return true;
+      });
+      console.log(`📋 [DEBUG] Sending ${validActions.length}/${actions.length} valid actions`);
+    
+    const requestBody = {
+      userId: currentUser.user_id,
+      actions: validActions
+    };
+    
+    console.log('📋 [DEBUG] Request body:', JSON.stringify(requestBody, null, 2));
+    
       const response = await fetch('http://localhost:3001/save-data-enhanced', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -221,18 +250,41 @@ function App() {
         const result = await response.json();
         console.log(`✅ Data save complete: ${result.successful}/${result.processed} actions successful`);
         
-        if (result.failed > 0) {
-          console.warn(`⚠️ ${result.failed} actions failed:`, result.results.filter(r => !r.success));
+        // FIXED: Safe handling of failed actions to prevent "malformed array literal" error
+        if (result.failed && result.failed > 0) {
+          console.warn(`⚠️ ${result.failed} actions failed`);
+          
+          // SAFE: Check if results exist and has failed items before filtering
+          if (result.results && Array.isArray(result.results)) {
+            const failedActions = result.results.filter(r => !r.success);
+            
+            // SAFE: Log each failed action separately to avoid array literal issues
+            failedActions.forEach((failedAction, index) => {
+              console.warn(`❌ Failed action ${index + 1}:`, {
+                type: failedAction.type || 'unknown',
+                error: failedAction.error || 'no error message',
+                // Don't include the full action data to avoid circular references
+              });
+            });
+          }
         }
         
         // Reload user data to ensure frontend is in sync with backend
         await loadUserData(currentUser.user_id);
         
       } else {
-        console.error('❌ Failed to save data changes');
+        const errorText = await response.text();
+        console.error('❌ Failed to save data changes. Response:', errorText);
       }
     } catch (error) {
       console.error('❌ Error saving data changes:', error);
+      
+      // SAFE: Log error details without causing additional errors
+      console.error('❌ Error details:', {
+        message: error.message,
+        name: error.name,
+        // Don't log the full error object to avoid circular references
+      });
     }
   };
 

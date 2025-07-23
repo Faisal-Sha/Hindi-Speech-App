@@ -381,87 +381,60 @@ function extractScheduleData(action) {
 }
 
 function extractMemoryData(action) {
-  console.log('🔍 Extracting memory data from action:', action);
-  console.log('🔍 Full action object:', JSON.stringify(action, null, 2));
+  console.log('📋 [DEEP DEBUG] === EXTRACT MEMORY DATA START ===');
+  console.log('📋 [DEEP DEBUG] Action type:', typeof action);
+  console.log('📋 [DEEP DEBUG] Action keys:', Object.keys(action || {}));
+  console.log('📋 [DEEP DEBUG] Raw action:', action);
   
-  // ENHANCED: Look in many more places for category name
-  const category = action.category ||
-                  action.categoryName ||
-                  action.category_name ||
-                  action.name ||
-                  action.title ||
-                  action.target ||
-                  action.data?.category ||
-                  action.data?.categoryName ||
-                  action.data?.category_name ||
-                  action.data?.name ||
-                  action.data?.title ||
-                  action.data?.target ||
-                  'General';  // Default fallback
+  if (!action) {
+    console.error('📋 [DEEP DEBUG] Action is null/undefined!');
+    return { category: 'General', memoryKey: `Memory_${Date.now()}`, memoryValue: null, categoryType: 'general' };
+  }
   
-  // ENHANCED: Look for memory key in many more places
-  const memoryKey = action.memoryKey ||
-                   action.memory_key ||
-                   action.key ||
-                   action.topic ||
-                   action.subject ||
-                   action.title ||
-                   action.name ||
-                   action.about ||
-                   action.data?.memoryKey ||
-                   action.data?.memory_key ||
-                   action.data?.key ||
-                   action.data?.topic ||
-                   action.data?.subject ||
-                   action.data?.title ||
-                   action.data?.name ||
-                   action.data?.about ||
-                   `Memory_${Date.now()}`;  // Auto-generate if not found
-  
-  // ENHANCED: Look for memory value/content in many more places
-  const memoryValue = action.memoryValue ||
-                     action.memory_value ||
-                     action.value ||
-                     action.content ||
-                     action.info ||
-                     action.information ||
-                     action.details ||
-                     action.text ||
-                     action.description ||
-                     action.message ||
-                     action.note ||
-                     action.data?.memoryValue ||
-                     action.data?.memory_value ||
-                     action.data?.value ||
-                     action.data?.content ||
-                     action.data?.info ||
-                     action.data?.information ||
-                     action.data?.details ||
-                     action.data?.text ||
-                     action.data?.description ||
-                     action.data?.message ||
-                     action.data?.note ||
-                     // SMART FALLBACK: Try to extract from the entire action if specific fields not found
-                     (typeof action === 'string' ? action : null) ||
-                     (action.data && typeof action.data === 'string' ? action.data : null) ||
-                     null;
-  
-  const categoryType = action.categoryType ||
-                      action.category_type ||
-                      action.type ||
-                      action.data?.categoryType ||
-                      action.data?.category_type ||
-                      action.data?.type ||
-                      'general';
-  
-  console.log(`✅ Extracted memory data:`, {
-      category, 
-      memoryKey, 
-      memoryValue: memoryValue ? `"${memoryValue.substring(0, 50)}..."` : 'null',
-      categoryType
-  });
-  
-  return { category, memoryKey, memoryValue, categoryType };
+  try {
+    console.log('📋 [DEEP DEBUG] Extracting category...');
+    const category = action.category ||
+                    action.categoryName ||
+                    action.data?.category ||
+                    action.data?.categoryName ||
+                    'General';
+    console.log('📋 [DEEP DEBUG] Extracted category:', category);
+    
+    console.log('📋 [DEEP DEBUG] Extracting memoryKey...');
+    const memoryKey = action.memoryKey ||
+                     action.key ||
+                     action.data?.memoryKey ||
+                     action.data?.key ||
+                     action.data?.name ||
+                     `Memory_${Date.now()}`;
+    console.log('📋 [DEEP DEBUG] Extracted memoryKey:', memoryKey);
+    
+    console.log('📋 [DEEP DEBUG] Extracting memoryValue...');
+    const memoryValue = action.memoryValue ||
+                       action.value ||
+                       action.data?.memoryValue ||
+                       action.data?.value ||
+                       action.data?.content ||
+                       null;
+    console.log('📋 [DEEP DEBUG] Extracted memoryValue:', memoryValue);
+    
+    const categoryType = action.categoryType ||
+                        action.data?.categoryType ||
+                        'general';
+    console.log('📋 [DEEP DEBUG] Extracted categoryType:', categoryType);
+    
+    const result = { category, memoryKey, memoryValue, categoryType };
+    console.log('📋 [DEEP DEBUG] Final result:', result);
+    console.log('📋 [DEEP DEBUG] === EXTRACT MEMORY DATA SUCCESS ===');
+    
+    return result;
+    
+  } catch (error) {
+    console.error('📋 [DEEP DEBUG] === EXTRACT MEMORY DATA FAILED ===');
+    console.error('📋 [DEEP DEBUG] Error:', error);
+    console.error('📋 [DEEP DEBUG] Error stack:', error.stack);
+    throw error;
+  }
 }
 
 
@@ -640,38 +613,98 @@ async function processAIActions(userId, actions) {
               });
               break;
 
-            case 'store_memory':
-              console.log('🧠 Storing memory...');
-              const storeMemoryData = extractMemoryData(action);
-              
-              if (!storeMemoryData.memoryValue) {
-                  throw new Error('Memory value is required for store_memory');
-              }
-              
-              // Store the memory
-              await addMemoryItem(
-                  userId,
-                  storeMemoryData.category,
-                  storeMemoryData.memoryKey,
-                  storeMemoryData.memoryValue,
-                  {
-                      memory_type: action.memory_type || action.data?.memory_type || 'fact',
-                      importance: action.importance || action.data?.importance || 0,
-                      tags: action.tags || action.data?.tags || [],
-                      expires_at: action.expires_at || action.data?.expires_at,
-                      is_private: action.is_private || action.data?.is_private || false
+              case 'store_memory':
+                console.log('🧠 [DEEP DEBUG] === STORE MEMORY START ===');
+                console.log('🧠 [DEEP DEBUG] Raw action:', JSON.stringify(action, null, 2));
+                
+                // FIXED: Declare storeMemoryData in the right scope
+                let storeMemoryData;
+                
+                try {
+                  console.log('🧠 [DEEP DEBUG] Step 1: Extracting memory data...');
+                  storeMemoryData = extractMemoryData(action);
+                  console.log('🧠 [DEEP DEBUG] Extracted data:', storeMemoryData);
+                  
+                  if (!storeMemoryData.memoryValue) {
+                      throw new Error('Memory value is required for store_memory');
                   }
-              );
+                  
+                  console.log('🧠 [DEEP DEBUG] Step 2: Preparing parameters...');
+                  const params = {
+                    userId: userId,
+                    category: storeMemoryData.category,
+                    memoryKey: storeMemoryData.memoryKey,
+                    memoryValue: storeMemoryData.memoryValue
+                  };
+                  console.log('🧠 [DEEP DEBUG] Parameters:', params);
+                  
+                  console.log('🧠 [DEEP DEBUG] Step 3: Calling addMemoryItem...');
+                  
+                  // Try with minimal options first
+                  const result = await addMemoryItem(
+                      userId,
+                      storeMemoryData.category,
+                      storeMemoryData.memoryKey,
+                      storeMemoryData.memoryValue,
+                      {} // Empty options object
+                  );
+                  
+                  console.log('🧠 [DEEP DEBUG] addMemoryItem succeeded:', result);
+                  
+                } catch (firstError) {
+                  console.log('🧠 [DEEP DEBUG] First attempt failed:', firstError.message);
+                  
+                  // FIXED: Check if storeMemoryData exists before using it
+                  if (!storeMemoryData) {
+                    console.error('🧠 [DEEP DEBUG] storeMemoryData is undefined, cannot retry');
+                    throw firstError;
+                  }
+                  
+                  // If category doesn't exist, try creating it
+                  if (firstError.message.includes('not found') || firstError.message.includes('Category')) {
+                    console.log(`🧠 [DEEP DEBUG] Creating category "${storeMemoryData.category}"...`);
+                    
+                    try {
+                      await createMemoryCategory(userId, storeMemoryData.category, 'general');
+                      console.log('🧠 [DEEP DEBUG] Category created successfully');
+                      
+                      // Try adding memory item again
+                      console.log('🧠 [DEEP DEBUG] Retrying addMemoryItem...');
+                      const result = await addMemoryItem(
+                          userId,
+                          storeMemoryData.category,
+                          storeMemoryData.memoryKey,
+                          storeMemoryData.memoryValue,
+                          {} // Empty options object
+                      );
+                      
+                      console.log('🧠 [DEEP DEBUG] Retry succeeded:', result);
+                      
+                    } catch (retryError) {
+                      console.error('🧠 [DEEP DEBUG] Retry failed:', retryError);
+                      console.error('🧠 [DEEP DEBUG] Retry error stack:', retryError.stack);
+                      throw retryError;
+                    }
+                  } else {
+                    console.error('🧠 [DEEP DEBUG] Non-category error:', firstError);
+                    console.error('🧠 [DEEP DEBUG] Error stack:', firstError.stack);
+                    throw firstError;
+                  }
+                }
+                
+                console.log('🧠 [DEEP DEBUG] === STORE MEMORY SUCCESS ===');
+                
+                // FIXED: Use safe fallback if storeMemoryData is undefined
+                results.push({ 
+                    success: true, 
+                    type: 'store_memory', 
+                    data: { 
+                        category: storeMemoryData?.category || 'Unknown',
+                        key: storeMemoryData?.memoryKey || 'Unknown'
+                    } 
+                });
+                break;
               
-              results.push({ 
-                  success: true, 
-                  type: 'store_memory', 
-                  data: { 
-                      category: storeMemoryData.category,
-                      key: storeMemoryData.memoryKey 
-                  } 
-              });
-              break;
             
             default:
             console.log(`❓ Unknown action type: ${action.type}`);
