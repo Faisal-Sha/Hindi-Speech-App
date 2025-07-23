@@ -3,7 +3,8 @@ import './App.css';
 
 // Import your existing components
 import Header from './components/Header';
-import UserSelector from './components/UserSelector'; // New component
+import UserSelector from './components/UserSelector';
+import ContentDisplay from './components/ContentDisplay';
 import useDataManagement from './hooks/useDataManagement';
 import useSpeechRecognition from './hooks/useSpeechRecognition';
 
@@ -342,6 +343,16 @@ function App() {
         )}
       </div>
 
+      <ContentDisplay
+        currentMode={currentMode}
+        messages={messages}
+        userLists={userLists}
+        userSchedules={userSchedules}
+        userMemory={userMemory}
+        isDataLoading={isDataLoading}
+      />
+
+
       {/* Live Speech Display */}
       {isListening && accumulatedText && (
         <div className="live-speech">
@@ -437,70 +448,6 @@ function App() {
           )}
         </div>
       </div>
-
-      {/* Data Display Sections */}
-      {currentMode === 'lists' && (
-        <div className="data-section">
-          <h3>📝 Your Lists</h3>
-          {Object.keys(userLists).length === 0 ? (
-            <div className="empty-state">
-              <p>No lists yet. Try saying "Create a shopping list"</p>
-            </div>
-          ) : (
-            <div className="data-items">
-              {Object.entries(userLists).map(([listName, list]) => (
-                <div key={listName} className="data-item">
-                  <h4>{list.name || listName}</h4>
-                  <p>{list.items?.length || 0} items</p>
-                  <small>Updated: {new Date(list.lastUpdated).toLocaleString()}</small>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {currentMode === 'schedule' && (
-        <div className="data-section">
-          <h3>📅 Your Schedules</h3>
-          {Object.keys(userSchedules).length === 0 ? (
-            <div className="empty-state">
-              <p>No schedules yet. Try saying "Add meeting tomorrow"</p>
-            </div>
-          ) : (
-            <div className="data-items">
-              {Object.entries(userSchedules).map(([scheduleName, schedule]) => (
-                <div key={scheduleName} className="data-item">
-                  <h4>{schedule.name || scheduleName}</h4>
-                  <p>{schedule.events?.length || 0} events</p>
-                  <small>Updated: {new Date(schedule.lastUpdated).toLocaleString()}</small>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {currentMode === 'memory' && (
-        <div className="data-section">
-          <h3>🧠 Your Memory</h3>
-          {Object.keys(userMemory).length === 0 ? (
-            <div className="empty-state">
-              <p>No memory items yet. Try saying "Remember my phone number"</p>
-            </div>
-          ) : (
-            <div className="data-items">
-              {Object.entries(userMemory).map(([categoryName, category]) => (
-                <div key={categoryName} className="data-item">
-                  <h4>{category.name || categoryName}</h4>
-                  <p>{category.items?.length || 0} items</p>
-                  <small>Updated: {new Date(category.lastUpdated).toLocaleString()}</small>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
     </div>
   );
 }
