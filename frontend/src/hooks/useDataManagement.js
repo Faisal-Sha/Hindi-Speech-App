@@ -663,67 +663,94 @@ const useDataManagement = (messages = []) => { // Default empty array to prevent
             });
             break;
             
-          case 'store_memory':
-            console.log('🧠 Storing memory with data:', action.data);
-            
-            const requestedMemoryCategory = action.data?.category || 
-                                          action.data?.categoryName || 
-                                          action.data?.target ||
-                                          'General';
-                                          
-            const memoryInfo = action.data?.info || 
-                              action.data?.data || 
-                              action.data?.content || 
-                              action.data;
-            
-            console.log(`🧠 Looking for memory category to store info. Requested: "${requestedMemoryCategory}"`);
-            
-            setUserMemory(prev => {
-              // Use our smart matching function
-              const matchingCategoryName = findBestMatchingItem(requestedMemoryCategory, prev, 'memory');
+            case 'store_memory':
+              console.log('🧠 [DEBUG] Storing memory with raw action:', action);
+              console.log('🧠 [DEBUG] Action type:', typeof action);
+              console.log('🧠 [DEBUG] Action.data:', action.data);
+              console.log('🧠 [DEBUG] Action.data type:', typeof action.data);
               
-              if (matchingCategoryName) {
-                // Found existing category - add to it!
-                console.log(`✅ Storing memory in existing category: "${matchingCategoryName}"`);
-                
-                const targetCategory = prev[matchingCategoryName];
-                const newMemoryItem = {
-                  id: Date.now(),
-                  content: typeof memoryInfo === 'string' ? memoryInfo : JSON.stringify(memoryInfo),
-                  addedAt: new Date(),
-                  ...memoryInfo // Spread the original info in case it's an object
-                };
-                
-                const updatedCategory = {
-                  ...targetCategory,
-                  items: [...targetCategory.items, newMemoryItem],
-                  lastUpdated: new Date()
-                };
-                
-                console.log('✅ Updated existing memory category:', updatedCategory);
-                return { ...prev, [matchingCategoryName]: updatedCategory };
-                
-              } else {
-                // No existing category found - create new one
-                console.log(`🧠 Creating new memory category "${requestedMemoryCategory}" (no existing match found)`);
-                
-                const newCategory = {
-                  category: requestedMemoryCategory,
-                  items: [{
-                    id: Date.now(),
-                    content: typeof memoryInfo === 'string' ? memoryInfo : JSON.stringify(memoryInfo),
-                    addedAt: new Date(),
-                    ...memoryInfo
-                  }],
-                  created: new Date(),
-                  id: Date.now()
-                };
-                
-                console.log('✅ Created new memory category:', newCategory);
-                return { ...prev, [requestedMemoryCategory]: newCategory };
+              // SAFE: Validate action structure before processing
+              if (!action.data) {
+                console.error('❌ [DEBUG] action.data is missing!', action);
+                break;
               }
-            });
-            break;
+              
+              const requestedMemoryCategory = action.data?.category || 
+                                            action.data?.categoryName || 
+                                            action.data?.target ||
+                                            'General';
+                                            
+              const memoryKey = action.data?.memoryKey || 
+                              action.data?.key ||
+                              action.data?.name ||
+                              `Memory_${Date.now()}`;
+                              
+              const memoryValue = action.data?.memoryValue ||
+                                action.data?.value ||
+                                action.data?.content ||
+                                action.data?.info ||
+                                'No content';
+              
+              console.log('🧠 [DEBUG] Extracted values:', {
+                category: requestedMemoryCategory,
+                key: memoryKey,
+                value: memoryValue
+              });
+              
+              // Continue with existing logic...
+              setUserMemory(prev => {
+                const matchingCategoryName = findBestMatchingItem(requestedMemoryCategory, prev, 'memory');
+                
+                if (matchingCategoryName) {
+                  console.log(`✅ [DEBUG] Found existing category: "${matchingCategoryName}"`);
+                  
+                  const targetCategory = prev[matchingCategoryName];
+                  const newMemoryItem = {
+                    id: Date.now(),
+                    key: memoryKey,
+                    value: memoryValue,
+                    content: typeof memoryValue === 'string' ? memoryValue : JSON.stringify(memoryValue),
+                    created: new Date(),
+                    type: action.data?.memoryType || 'fact'
+                  };
+                  
+                  console.log('🧠 [DEBUG] Creating memory item:', newMemoryItem);
+                  
+                  const updatedItems = [...(targetCategory.items || []), newMemoryItem];
+                  const updatedCategory = {
+                    ...targetCategory,
+                    items: updatedItems,
+                    lastUpdated: new Date()
+                  };
+                  
+                  console.log(`✅ [DEBUG] Updated category with ${updatedItems.length} items`);
+                  return { ...prev, [matchingCategoryName]: updatedCategory };
+                } else {
+                  console.log(`📝 [DEBUG] Creating new category: "${requestedMemoryCategory}"`);
+                  
+                  const newMemoryItem = {
+                    id: Date.now(),
+                    key: memoryKey,
+                    value: memoryValue,
+                    content: typeof memoryValue === 'string' ? memoryValue : JSON.stringify(memoryValue),
+                    created: new Date(),
+                    type: action.data?.memoryType || 'fact'
+                  };
+                  
+                  const newCategory = {
+                    name: requestedMemoryCategory,
+                    items: [newMemoryItem],
+                    created: new Date(),
+                    lastUpdated: new Date(),
+                    id: Date.now()
+                  };
+                  
+                  console.log(`✅ [DEBUG] Created new category with item:`, newCategory);
+                  return { ...prev, [requestedMemoryCategory]: newCategory };
+                }
+              });
+              break;
+
           
             case 'rename_memory':
               console.log('✏️ Renaming memory category with data:', action.data);
