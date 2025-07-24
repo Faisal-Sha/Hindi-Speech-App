@@ -518,6 +518,90 @@ async function processAIActions(userId, actions) {
                   } 
               });
               break;
+
+            case 'update_list':
+              console.log('📝 Updating list item...');
+              const updateData = action.data;
+              const { listName, itemId, operation, newText } = updateData;
+              
+              if (!listName || !itemId || !operation) {
+                  throw new Error('Missing required fields for update_list: listName, itemId, operation');
+              }
+              
+              let updateResult;
+              
+              switch (operation) {
+                case 'complete':
+                  updateResult = await updateListItemStatus(userId, listName, itemId, true);
+                  break;
+                case 'uncomplete':
+                  updateResult = await updateListItemStatus(userId, listName, itemId, false);
+                  break;
+                case 'delete':
+                  updateResult = await deleteListItem(userId, listName, itemId);
+                  break;
+                case 'edit':
+                  if (!newText) {
+                      throw new Error('newText is required for edit operation');
+                  }
+                  updateResult = await updateListItemText(userId, listName, itemId, newText);
+                  break;
+                default:
+                  throw new Error(`Unknown update operation: ${operation}`);
+              }
+              
+              results.push({ 
+                  success: true, 
+                  type: 'update_list', 
+                  operation: operation,
+                  data: { 
+                      listName: listName,
+                      itemId: itemId,
+                      result: updateResult
+                  } 
+              });
+            break;
+              
+            // ADD THIS NEW CASE FOR DELETE_LIST
+            case 'delete_list':
+              console.log('🗑️ Deleting entire list...');
+              const deleteListData = action.data;
+              const listToDelete = deleteListData?.name || deleteListData?.listName;
+              
+              if (!listToDelete) {
+                  throw new Error('List name is required for delete_list');
+              }
+              
+              // First, get the list ID
+              const listQuery = await pool.query(
+                  'SELECT id FROM user_lists WHERE user_id = $1 AND list_name = $2',
+                  [userId, listToDelete]
+              );
+              
+              if (listQuery.rows.length === 0) {
+                  throw new Error(`List "${listToDelete}" not found for user ${userId}`);
+              }
+              
+              const listId = listQuery.rows[0].id;
+              
+              // Delete all items in the list first
+              await pool.query('DELETE FROM list_items WHERE list_id = $1', [listId]);
+              
+              // Then delete the list itself
+              const deleteResult = await pool.query(
+                  'DELETE FROM user_lists WHERE id = $1 RETURNING *',
+                  [listId]
+              );
+              
+              results.push({ 
+                  success: true, 
+                  type: 'delete_list', 
+                  data: { 
+                      listName: listToDelete,
+                      deletedList: deleteResult.rows[0]
+                  } 
+              });
+              break;
             
             case 'create_schedule':
               console.log('📅 Creating new schedule...');
@@ -1056,13 +1140,34 @@ router.get('/lists/:userId', async (req, res) => {
 
 router.post('/lists/update', async (req, res) => {
   try {
+    console.log('\n🔍 ===== DEBUGGING /lists/update =====');
+    console.log('📥 Raw request body:', JSON.stringify(req.body, null, 2));
+    
     const { userId, action } = req.body;
     
-    console.log('🔄 Processing list update:', JSON.stringify(action, null, 2));
+    console.log(`👤 User ID: ${userId}`);
+    console.log(`🎯 Action type: ${action?.type}`);
+    console.log(`📊 Action data:`, JSON.stringify(action?.data, null, 2));
     
-    // DON'T call ensureUser - user already exists and we don't want to create profiles
+    // Validate user exists
+    const userCheck = await pool.query('SELECT user_id FROM users WHERE user_id = $1', [userId]);
+    console.log(`👤 User check: ${userCheck.rows.length} rows found`);
+    
+    if (userCheck.rows.length === 0) {
+      console.error(`❌ User ${userId} not found`);
+      return res.status(404).json({ 
+        error: 'User not found',
+        message: `User with ID ${userId} does not exist`
+      });
+    }
     
     const { listName, itemId, operation, newText } = action.data || {};
+    
+    console.log(`📋 Extracted values:`);
+    console.log(`   - listName: "${listName}"`);
+    console.log(`   - itemId: ${itemId}`);
+    console.log(`   - operation: "${operation}"`);
+    console.log(`   - newText: "${newText}"`);
     
     if (!listName || !itemId || !operation) {
       console.error('❌ Missing required fields:', { listName, itemId, operation });
@@ -1074,29 +1179,32 @@ router.post('/lists/update', async (req, res) => {
     
     let result;
     
+    console.log(`🚀 Starting ${operation} operation...`);
+    
     switch (operation) {
       case 'complete':
-        console.log(`✅ Marking item ${itemId} as complete in list "${listName}"`);
+        console.log(`✅ Calling updateListItemStatus(${userId}, "${listName}", ${itemId}, true)`);
         result = await updateListItemStatus(userId, listName, itemId, true);
         break;
         
       case 'uncomplete':
-        console.log(`⭕ Marking item ${itemId} as incomplete in list "${listName}"`);
+        console.log(`⭕ Calling updateListItemStatus(${userId}, "${listName}", ${itemId}, false)`);
         result = await updateListItemStatus(userId, listName, itemId, false);
         break;
         
       case 'delete':
-        console.log(`🗑️ Deleting item ${itemId} from list "${listName}"`);
+        console.log(`🗑️ Calling deleteListItem(${userId}, "${listName}", ${itemId})`);
         result = await deleteListItem(userId, listName, itemId);
         break;
         
       case 'edit':
         if (!newText) {
+          console.error('❌ newText is required for edit operation');
           return res.status(400).json({ 
             error: 'newText is required for edit operation' 
           });
         }
-        console.log(`📝 Editing item ${itemId} text to: "${newText}"`);
+        console.log(`📝 Calling updateListItemText(${userId}, "${listName}", ${itemId}, "${newText}")`);
         result = await updateListItemText(userId, listName, itemId, newText);
         break;
         
@@ -1107,7 +1215,9 @@ router.post('/lists/update', async (req, res) => {
         });
     }
     
-    console.log(`✅ List item ${operation} completed successfully:`, result);
+    console.log(`✅ Operation completed successfully!`);
+    console.log(`📄 Result:`, JSON.stringify(result, null, 2));
+    console.log('🔍 ===== END DEBUGGING =====\n');
     
     res.json({ 
       success: true, 
@@ -1118,7 +1228,10 @@ router.post('/lists/update', async (req, res) => {
     });
     
   } catch (error) {
-    console.error('❌ Error updating list item:', error);
+    console.error('❌ ERROR in /lists/update:', error);
+    console.error('❌ Error stack:', error.stack);
+    console.log('🔍 ===== END DEBUGGING (ERROR) =====\n');
+    
     res.status(500).json({ 
       error: 'Failed to update list item',
       details: error.message,
@@ -1126,7 +1239,6 @@ router.post('/lists/update', async (req, res) => {
     });
   }
 });
-
 //SCHEDULE 
 
 router.post('/schedules/:userId', async (req, res) => {

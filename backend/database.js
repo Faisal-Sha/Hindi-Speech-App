@@ -335,9 +335,63 @@ async function getUserLists(userId, includeArchived = false) {
 
 async function updateListItemStatus(userId, listName, itemId, completed) {
   try {
-    console.log(`🔄 Updating item ${itemId} in list "${listName}" to completed: ${completed}`);
+    console.log(`🔄 DEBUGGING updateListItemStatus:`);
+    console.log(`   - userId: ${userId}`);
+    console.log(`   - listName: "${listName}"`);
+    console.log(`   - itemId: ${itemId}`);
+    console.log(`   - completed: ${completed}`);
     
-    // Update the item directly in the database
+    // STEP 1: Check if the list exists for this user
+    const listCheck = await pool.query(`
+      SELECT id, list_name FROM user_lists 
+      WHERE user_id = $1 AND list_name = $2
+    `, [userId, listName]);
+    
+    console.log(`   - List check result: ${listCheck.rows.length} rows found`);
+    if (listCheck.rows.length > 0) {
+      console.log(`   - Found list: ID ${listCheck.rows[0].id}, Name "${listCheck.rows[0].list_name}"`);
+    } else {
+      console.error(`   ❌ No list found with name "${listName}" for user ${userId}`);
+      
+      // Let's see what lists DO exist for this user
+      const allLists = await pool.query(`
+        SELECT id, list_name FROM user_lists WHERE user_id = $1
+      `, [userId]);
+      console.log(`   - Available lists for user ${userId}:`, allLists.rows);
+      
+      throw new Error(`List "${listName}" not found for user ${userId}`);
+    }
+    
+    // STEP 2: Check if the item exists in this list
+    const itemCheck = await pool.query(`
+      SELECT li.id, li.item_text, li.is_completed, ul.list_name
+      FROM list_items li
+      JOIN user_lists ul ON li.list_id = ul.id
+      WHERE li.id = $1 AND ul.user_id = $2 AND ul.list_name = $3
+    `, [itemId, userId, listName]);
+    
+    console.log(`   - Item check result: ${itemCheck.rows.length} rows found`);
+    if (itemCheck.rows.length > 0) {
+      const item = itemCheck.rows[0];
+      console.log(`   - Found item: ID ${item.id}, Text "${item.item_text}", Currently completed: ${item.is_completed}`);
+    } else {
+      console.error(`   ❌ No item found with ID ${itemId} in list "${listName}" for user ${userId}`);
+      
+      // Let's see what items DO exist in this list
+      const allItems = await pool.query(`
+        SELECT li.id, li.item_text, li.is_completed
+        FROM list_items li
+        JOIN user_lists ul ON li.list_id = ul.id
+        WHERE ul.user_id = $1 AND ul.list_name = $2
+      `, [userId, listName]);
+      console.log(`   - Available items in list "${listName}":`, allItems.rows);
+      
+      throw new Error(`Item with ID ${itemId} not found in list "${listName}" for user ${userId}`);
+    }
+    
+    // STEP 3: Perform the update
+    console.log(`   - Attempting to update item ${itemId} to completed: ${completed}`);
+    
     const result = await pool.query(`
       UPDATE list_items 
       SET is_completed = $1, updated_at = CURRENT_TIMESTAMP
@@ -349,22 +403,56 @@ async function updateListItemStatus(userId, listName, itemId, completed) {
       RETURNING *
     `, [completed, itemId, userId, listName]);
     
+    console.log(`   - Update result: ${result.rows.length} rows affected`);
+    
     if (result.rows.length === 0) {
-      throw new Error(`Item with ID ${itemId} not found in list "${listName}" for user ${userId}`);
+      throw new Error(`Update failed - no rows affected for item ${itemId}`);
     }
     
-    console.log(`✅ Item ${itemId} completion status updated to: ${completed}`);
-    return result.rows[0];
+    const updatedItem = result.rows[0];
+    console.log(`   ✅ Successfully updated item:`, {
+      id: updatedItem.id,
+      text: updatedItem.item_text,
+      completed: updatedItem.is_completed,
+      updated_at: updatedItem.updated_at
+    });
+    
+    return updatedItem;
     
   } catch (error) {
-    console.error('❌ Error updating list item status:', error);
+    console.error('❌ Error in updateListItemStatus:', error);
+    console.error('❌ Stack trace:', error.stack);
     throw error;
   }
 }
 
 async function updateListItemText(userId, listName, itemId, newText) {
   try {
-    console.log(`📝 Updating item ${itemId} text in list "${listName}" to: "${newText}"`);
+    console.log(`📝 DEBUGGING updateListItemText:`);
+    console.log(`   - userId: ${userId}`);
+    console.log(`   - listName: "${listName}"`);
+    console.log(`   - itemId: ${itemId}`);
+    console.log(`   - newText: "${newText}"`);
+    
+    // STEP 1: Check if the item exists before updating
+    const itemCheck = await pool.query(`
+      SELECT li.id, li.item_text, ul.list_name
+      FROM list_items li
+      JOIN user_lists ul ON li.list_id = ul.id
+      WHERE li.id = $1 AND ul.user_id = $2 AND ul.list_name = $3
+    `, [itemId, userId, listName]);
+    
+    console.log(`   - Item check result: ${itemCheck.rows.length} rows found`);
+    if (itemCheck.rows.length > 0) {
+      const item = itemCheck.rows[0];
+      console.log(`   - Found item to edit: ID ${item.id}, Current text: "${item.item_text}"`);
+    } else {
+      console.error(`   ❌ No item found with ID ${itemId} in list "${listName}" for user ${userId}`);
+      throw new Error(`Item with ID ${itemId} not found in list "${listName}" for user ${userId}`);
+    }
+    
+    // STEP 2: Perform the update
+    console.log(`   - Attempting to update item ${itemId} text to: "${newText}"`);
     
     const result = await pool.query(`
       UPDATE list_items 
@@ -377,15 +465,25 @@ async function updateListItemText(userId, listName, itemId, newText) {
       RETURNING *
     `, [newText, itemId, userId, listName]);
     
+    console.log(`   - Update result: ${result.rows.length} rows affected`);
+    
     if (result.rows.length === 0) {
-      throw new Error(`Item with ID ${itemId} not found in list "${listName}" for user ${userId}`);
+      throw new Error(`Update failed - no rows affected for item ${itemId}`);
     }
     
-    console.log(`✅ Item ${itemId} text updated successfully`);
-    return result.rows[0];
+    const updatedItem = result.rows[0];
+    console.log(`   ✅ Successfully updated item text:`, {
+      id: updatedItem.id,
+      old_text: itemCheck.rows[0].item_text,
+      new_text: updatedItem.item_text,
+      updated_at: updatedItem.updated_at
+    });
+    
+    return updatedItem;
     
   } catch (error) {
-    console.error('❌ Error updating list item text:', error);
+    console.error('❌ Error in updateListItemText:', error);
+    console.error('❌ Stack trace:', error.stack);
     throw error;
   }
 }
@@ -393,9 +491,31 @@ async function updateListItemText(userId, listName, itemId, newText) {
 
 async function deleteListItem(userId, listName, itemId) {
   try {
-    console.log(`🗑️ Deleting item ${itemId} from list "${listName}"`);
+    console.log(`🗑️ DEBUGGING deleteListItem:`);
+    console.log(`   - userId: ${userId}`);
+    console.log(`   - listName: "${listName}"`);
+    console.log(`   - itemId: ${itemId}`);
     
-    // Delete the item from the database
+    // STEP 1: Check if the item exists before deleting
+    const itemCheck = await pool.query(`
+      SELECT li.id, li.item_text, ul.list_name
+      FROM list_items li
+      JOIN user_lists ul ON li.list_id = ul.id
+      WHERE li.id = $1 AND ul.user_id = $2 AND ul.list_name = $3
+    `, [itemId, userId, listName]);
+    
+    console.log(`   - Item check result: ${itemCheck.rows.length} rows found`);
+    if (itemCheck.rows.length > 0) {
+      const item = itemCheck.rows[0];
+      console.log(`   - Found item to delete: ID ${item.id}, Text "${item.item_text}"`);
+    } else {
+      console.error(`   ❌ No item found with ID ${itemId} in list "${listName}" for user ${userId}`);
+      throw new Error(`Item with ID ${itemId} not found in list "${listName}" for user ${userId}`);
+    }
+    
+    // STEP 2: Perform the deletion
+    console.log(`   - Attempting to delete item ${itemId}`);
+    
     const result = await pool.query(`
       DELETE FROM list_items 
       WHERE id = $1 
@@ -406,15 +526,23 @@ async function deleteListItem(userId, listName, itemId) {
       RETURNING *
     `, [itemId, userId, listName]);
     
+    console.log(`   - Delete result: ${result.rows.length} rows affected`);
+    
     if (result.rows.length === 0) {
-      throw new Error(`Item with ID ${itemId} not found in list "${listName}" for user ${userId}`);
+      throw new Error(`Delete failed - no rows affected for item ${itemId}`);
     }
     
-    console.log(`✅ Item ${itemId} deleted successfully`);
-    return result.rows[0];
+    const deletedItem = result.rows[0];
+    console.log(`   ✅ Successfully deleted item:`, {
+      id: deletedItem.id,
+      text: deletedItem.item_text
+    });
+    
+    return deletedItem;
     
   } catch (error) {
-    console.error('❌ Error deleting list item:', error);
+    console.error('❌ Error in deleteListItem:', error);
+    console.error('❌ Stack trace:', error.stack);
     throw error;
   }
 }

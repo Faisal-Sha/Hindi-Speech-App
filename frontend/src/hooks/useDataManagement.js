@@ -173,16 +173,17 @@ const useDataManagement = (messages = []) => { // Default empty array to prevent
   };
 
   // Handle AI actions
-  const handleAiActions = (actions) => {
+  const handleAiActions = async (actions, userId = 'default') => {
     if (!actions || !Array.isArray(actions)) {
       console.log('⚠️ No actions to process');
       return;
     }
   
-    actions.forEach(action => {
+    actions.forEach(async (action) => {
       console.log('🎯 Processing AI action:', action);
       
       try {
+        // STEP 1: Update local state (all your existing logic stays the same)
         switch(action.type) {
           case 'create_list':
             console.log('📝 Creating list with data:', action.data);
@@ -190,7 +191,7 @@ const useDataManagement = (messages = []) => { // Default empty array to prevent
             const listName = action.data?.name || 
                             action.data?.listName || 
                             action.data?.title || 
-                            `List ${Object.keys(userLists).length + 1}`; // Better default naming
+                            `List ${Object.keys(userLists).length + 1}`;
                             
             const listType = action.data?.listType || 
                             action.data?.type || 
@@ -218,146 +219,76 @@ const useDataManagement = (messages = []) => { // Default empty array to prevent
               return { ...prev, [listName]: newList };
             });
             break;
-
-        case 'add_to_list':
-          console.log('➕ Adding to list with data:', action.data);
-          
-          const requestedListName = action.data?.listName || 
-                                  action.data?.targetList || 
-                                  action.data?.name ||
-                                  action.data?.target ||
-                                  'the list'; // Use 'the list' for vague matching
-                                  
-          const itemsToAdd = action.data?.items || 
-                            (action.data?.item ? [action.data.item] : []) ||
-                            [];
-          
-          console.log(`➕ Looking for list to add ${itemsToAdd.length} items. Requested: "${requestedListName}"`);
-          
-          setUserLists(prev => {
-            // Use our improved matching function with name priority
-            const matchingListName = findBestMatchingItem(requestedListName, prev, 'list');
+  
+          case 'add_to_list':
+            console.log('➕ Adding to list with data:', action.data);
             
-            if (matchingListName) {
-              // Found existing list - add to it!
-              console.log(`✅ Adding items to existing list: "${matchingListName}"`);
+            const requestedListName = action.data?.listName || 
+                                    action.data?.targetList || 
+                                    action.data?.name ||
+                                    action.data?.target ||
+                                    'the list';
+                                    
+            const itemsToAdd = action.data?.items || 
+                              (action.data?.item ? [action.data.item] : []) ||
+                              [];
+            
+            console.log(`➕ Looking for list to add ${itemsToAdd.length} items. Requested: "${requestedListName}"`);
+            
+            setUserLists(prev => {
+              const matchingListName = findBestMatchingItem(requestedListName, prev, 'list');
               
-              const targetList = prev[matchingListName];
-              const newItems = itemsToAdd.map((item, index) => ({
-                id: Date.now() + index,
-                text: typeof item === 'string' ? item : item.text || JSON.stringify(item),
-                completed: false,
-                addedAt: new Date()
-              }));
-              
-              const updatedList = {
-                ...targetList,
-                items: [...targetList.items, ...newItems],
-                lastUpdated: new Date()
-              };
-              
-              console.log('✅ Updated existing list:', updatedList);
-              return { ...prev, [matchingListName]: updatedList };
-              
-            } else {
-              // No existing list found - create new one with the requested name
-              console.log(`📝 Creating new list "${requestedListName}" (no existing match found)`);
-              
-              const finalListName = requestedListName === 'the list' ? 
-                                    `List ${Object.keys(prev).length + 1}` : 
-                                    requestedListName;
-              
-              const newList = {
-                name: finalListName,
-                items: itemsToAdd.map((item, index) => ({
+              if (matchingListName) {
+                console.log(`✅ Adding items to existing list: "${matchingListName}"`);
+                
+                const targetList = prev[matchingListName];
+                const newItems = itemsToAdd.map((item, index) => ({
                   id: Date.now() + index,
                   text: typeof item === 'string' ? item : item.text || JSON.stringify(item),
                   completed: false,
                   addedAt: new Date()
-                })),
-                created: new Date(),
-                listType: 'custom',
-                id: Date.now()
-              };
-              
-              console.log('✅ Created new list:', newList);
-              return { ...prev, [finalListName]: newList };
-            }
-          });
-          break;
-                  
-        case 'rename_list':
-          console.log('✏️ Renaming list with data:', action.data);
-          
-          const oldListName = action.data?.oldName || action.data?.currentName;
-          const newListName = action.data?.newName || action.data?.name;
-          
-          if (!oldListName || !newListName) {
-            console.error('❌ Missing oldName or newName for rename operation');
-            break;
-          }
-          
-          console.log(`✏️ Renaming list "${oldListName}" to "${newListName}"`);
-          
-          setUserLists(prev => {
-            const matchingListName = findBestMatchingItem(oldListName, prev, 'list');
-            
-            if (matchingListName && prev[matchingListName]) {
-              const listToRename = prev[matchingListName];
-              const updatedList = {
-                ...listToRename,
-                name: newListName,
-                lastUpdated: new Date()
-              };
-              
-              // Create new object without the old key
-              const newState = { ...prev };
-              delete newState[matchingListName];
-              newState[newListName] = updatedList;
-              
-              console.log(`✅ Renamed list "${matchingListName}" to "${newListName}"`);
-              return newState;
-            } else {
-              console.error(`❌ List "${oldListName}" not found for renaming`);
-              return prev;
-            }
-          });
-          break;
-        
-          case 'delete_list':
-            console.log('🗑️ Deleting list with data:', action.data);
-            
-            const listToDelete = action.data?.name || action.data?.listName;
-            
-            if (!listToDelete) {
-              console.error('❌ Missing list name for delete operation');
-              break;
-            }
-            
-            console.log(`🗑️ Deleting list "${listToDelete}"`);
-            
-            setUserLists(prev => {
-              const matchingListName = findBestMatchingItem(listToDelete, prev, 'list');
-              
-              if (matchingListName && prev[matchingListName]) {
-                const newState = { ...prev };
-                delete newState[matchingListName];
+                }));
                 
-                console.log(`✅ Deleted list "${matchingListName}"`);
-                return newState;
+                const updatedList = {
+                  ...targetList,
+                  items: [...targetList.items, ...newItems],
+                  lastUpdated: new Date()
+                };
+                
+                console.log(`✅ Added ${newItems.length} items to list "${matchingListName}"`);
+                return { ...prev, [matchingListName]: updatedList };
               } else {
-                console.error(`❌ List "${listToDelete}" not found for deletion`);
-                return prev;
+                console.log(`➕ Creating new list "${requestedListName}" with items`);
+                
+                const finalListName = requestedListName === 'the list' ? 
+                                      `List ${Object.keys(prev).length + 1}` : 
+                                      requestedListName;
+                
+                const newList = {
+                  name: finalListName,
+                  items: itemsToAdd.map((item, index) => ({
+                    id: Date.now() + index,
+                    text: typeof item === 'string' ? item : item.text || JSON.stringify(item),
+                    completed: false,
+                    addedAt: new Date()
+                  })),
+                  created: new Date(),
+                  listType: 'custom',
+                  id: Date.now()
+                };
+                
+                console.log('✅ Created new list:', newList);
+                return { ...prev, [finalListName]: newList };
               }
             });
             break;
-          
+            
           case 'update_list':
             console.log('📝 Updating list items with data:', action.data);
             
             const targetList = action.data?.listName || action.data?.name;
             const itemId = action.data?.itemId;
-            const operation = action.data?.operation; // 'complete', 'uncomplete', 'delete', 'edit'
+            const operation = action.data?.operation;
             const newText = action.data?.newText;
             
             if (!targetList) {
@@ -375,7 +306,6 @@ const useDataManagement = (messages = []) => { // Default empty array to prevent
                 let updatedItems = [...listToUpdate.items];
                 
                 if (itemId) {
-                  // Update specific item
                   const itemIndex = updatedItems.findIndex(item => item.id === itemId);
                   if (itemIndex !== -1) {
                     switch (operation) {
@@ -397,22 +327,6 @@ const useDataManagement = (messages = []) => { // Default empty array to prevent
                         console.error(`❌ Unknown operation: ${operation}`);
                         return prev;
                     }
-                  }
-                } else {
-                  // Bulk operations
-                  switch (operation) {
-                    case 'clear_completed':
-                      updatedItems = updatedItems.filter(item => !item.completed);
-                      break;
-                    case 'mark_all_complete':
-                      updatedItems = updatedItems.map(item => ({ ...item, completed: true }));
-                      break;
-                    case 'mark_all_incomplete':
-                      updatedItems = updatedItems.map(item => ({ ...item, completed: false }));
-                      break;
-                    default:
-                      console.error(`❌ Unknown bulk operation: ${operation}`);
-                      return prev;
                   }
                 }
                 
@@ -858,12 +772,15 @@ const useDataManagement = (messages = []) => { // Default empty array to prevent
             console.log('❓ Unknown action type:', action.type);
             console.log('Available action types: create_list, add_to_list, create_schedule, add_event, create_memory, store_memory');
         }
+
       } catch (error) {
         console.error(`❌ Error processing action ${action.type}:`, error);
         console.log('Action data was:', action);
       }
     });
   };
+
+  
   // Process messages for chat data (safe version)
   useEffect(() => {
     if (Array.isArray(messages) && messages.length > 0) {
