@@ -94,6 +94,70 @@ function App() {
     setMessages([]);
   };
 
+  // =====================================
+  // LIST ITEM INTERACTION HANDLERS
+  // =====================================
+  
+  /**
+   * Handle updates to list items (complete, uncomplete, delete)
+   * This function will be passed to ContentDisplay component
+   */
+  const handleUpdateListItem = async (action) => {
+    if (!currentUser) {
+      console.error('❌ No user selected');
+      return;
+    }
+
+    try {
+      console.log('🔄 Handling list item update:', action);
+      
+      // Use the existing handleAiActions to process the update
+      await handleAiActions([action], currentUser.user_id);
+      
+      console.log('✅ List item updated successfully');
+      
+      // Optionally, you could also send this to the backend to sync
+      await saveListUpdateToBackend(action);
+      
+    } catch (error) {
+      console.error('❌ Error updating list item:', error);
+      
+      // Could show a toast notification here
+      // For now, just log the error
+    }
+  };
+
+  /**
+   * Save list updates to backend for persistence
+   */
+  const saveListUpdateToBackend = async (action) => {
+    try {
+      console.log('💾 Saving list update to backend...');
+      
+      const response = await fetch('http://localhost:3001/lists/update', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          userId: currentUser.user_id,
+          action: action,
+          userLists: userLists // Current state for context
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${await response.text()}`);
+      }
+
+      const result = await response.json();
+      console.log('✅ List update saved to backend:', result);
+
+    } catch (error) {
+      // Don't throw here - we want the UI update to work even if backend fails
+      console.warn('⚠️ Failed to save to backend (UI still updated):', error.message);
+    }
+  };
   
   
   const sendMessage = async (messageText) => {
@@ -350,6 +414,7 @@ function App() {
         userSchedules={userSchedules}
         userMemory={userMemory}
         isDataLoading={isDataLoading}
+        onUpdateListItem={handleUpdateListItem}
       />
 
 

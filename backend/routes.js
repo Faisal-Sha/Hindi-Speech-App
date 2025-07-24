@@ -11,6 +11,9 @@ const {
     createUserList,
     addItemToList,
     getUserLists,
+    updateListItemStatus,
+    updateListItemText,
+    deleteListItem,
     createUserSchedule,
     addEventToSchedule,
     getUserSchedules,
@@ -1049,6 +1052,79 @@ router.get('/lists/:userId', async (req, res) => {
       console.error('❌ Error getting user lists:', error);
       res.status(500).json({ error: 'Failed to get user lists' });
     }
+});
+
+router.post('/lists/update', async (req, res) => {
+  try {
+    const { userId, action } = req.body;
+    
+    console.log('🔄 Processing list update:', JSON.stringify(action, null, 2));
+    
+    // DON'T call ensureUser - user already exists and we don't want to create profiles
+    
+    const { listName, itemId, operation, newText } = action.data || {};
+    
+    if (!listName || !itemId || !operation) {
+      console.error('❌ Missing required fields:', { listName, itemId, operation });
+      return res.status(400).json({ 
+        error: 'Missing required fields: listName, itemId, operation',
+        received: { listName, itemId, operation }
+      });
+    }
+    
+    let result;
+    
+    switch (operation) {
+      case 'complete':
+        console.log(`✅ Marking item ${itemId} as complete in list "${listName}"`);
+        result = await updateListItemStatus(userId, listName, itemId, true);
+        break;
+        
+      case 'uncomplete':
+        console.log(`⭕ Marking item ${itemId} as incomplete in list "${listName}"`);
+        result = await updateListItemStatus(userId, listName, itemId, false);
+        break;
+        
+      case 'delete':
+        console.log(`🗑️ Deleting item ${itemId} from list "${listName}"`);
+        result = await deleteListItem(userId, listName, itemId);
+        break;
+        
+      case 'edit':
+        if (!newText) {
+          return res.status(400).json({ 
+            error: 'newText is required for edit operation' 
+          });
+        }
+        console.log(`📝 Editing item ${itemId} text to: "${newText}"`);
+        result = await updateListItemText(userId, listName, itemId, newText);
+        break;
+        
+      default:
+        console.error(`❌ Unknown operation: ${operation}`);
+        return res.status(400).json({ 
+          error: `Unknown operation: ${operation}` 
+        });
+    }
+    
+    console.log(`✅ List item ${operation} completed successfully:`, result);
+    
+    res.json({ 
+      success: true, 
+      operation,
+      listName,
+      itemId,
+      result 
+    });
+    
+  } catch (error) {
+    console.error('❌ Error updating list item:', error);
+    res.status(500).json({ 
+      error: 'Failed to update list item',
+      details: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
 });
 
 //SCHEDULE 
