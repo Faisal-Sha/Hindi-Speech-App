@@ -6,34 +6,98 @@ const ContentDisplay = ({
   userLists, 
   userSchedules, 
   userMemory,
-  isDataLoading 
+  isDataLoading, 
+  onUpdateListItem
 }) => {
+
+  const [editingItem, setEditingItem] = useState(null);
+  const [editText, setEditText] = useState('');
 
   // Helper function to safely format dates
   const formatDate = (dateInput) => {
     if (!dateInput) return 'recently';
     
     try {
-      // If it's already a Date object, use it directly
       if (dateInput instanceof Date) {
         return dateInput.toLocaleDateString();
       }
       
-      // If it's a string, try to convert it to a Date
       if (typeof dateInput === 'string') {
         const date = new Date(dateInput);
-        // Check if the date is valid
         if (!isNaN(date.getTime())) {
           return date.toLocaleDateString();
         }
       }
       
-      // If we can't parse it, return a fallback
       return 'recently';
     } catch (error) {
       console.warn('Error formatting date:', dateInput, error);
       return 'recently';
     }
+  };
+  const handleItemUpdate = async (listName, item, operation, newText = null) => {
+    if (!onUpdateListItem) {
+      console.warn('onUpdateListItem prop not provided');
+      return;
+    }
+
+    try {
+      console.log(`🔄 ${operation} item in list "${listName}":`, item);
+      
+      const actionData = {
+        type: 'update_list',
+        data: {
+          listName: listName,
+          itemId: item.id,
+          operation: operation
+        }
+      };
+
+      if (newText) {
+        actionData.data.newText = newText;
+      }
+      
+      await onUpdateListItem(actionData);
+      
+      console.log(`✅ Successfully ${operation}d item`);
+    } catch (error) {
+      console.error(`❌ Error ${operation}ing item:`, error);
+    }
+  };
+
+
+  
+  // Toggle completion status
+  const toggleItemCompletion = (listName, item) => {
+    const operation = item.completed ? 'uncomplete' : 'complete';
+    handleItemUpdate(listName, item, operation);
+  };
+
+  // Delete an item
+  const deleteItem = (listName, item) => {
+    if (window.confirm(`Are you sure you want to delete "${item.text || item.name}"?`)) {
+      handleItemUpdate(listName, item, 'delete');
+    }
+  };
+
+  const startEditing = (listName, item) => {
+    setEditingItem({ listName, itemId: item.id });
+    setEditText(item.text || item.name || '');
+  };
+
+  // Save edited item
+  const saveEdit = async (listName, item) => {
+    if (editText.trim() !== item.text) {
+      await handleItemUpdate(listName, item, 'edit', editText.trim());
+    }
+    setEditingItem(null);
+    setEditText('');
+  };
+
+  // Cancel editing
+  const cancelEdit = () => {
+    setEditingItem(null);
+    setEditText('');
   };
 
   // Simple collapsible section component - no need for separate file
@@ -142,7 +206,6 @@ const ContentDisplay = ({
     );
   };
 
-  // Lists display
   const renderListsContent = () => {
     const hasLists = userLists && Object.keys(userLists).length > 0;
     
@@ -167,16 +230,110 @@ const ContentDisplay = ({
                   </div>
                 ) : (
                   <div className="list-items">
-                    {list.items.map((item, index) => (
-                      <div key={index} className={`list-item ${item.completed ? 'completed' : 'pending'}`}>
-                        <span className="list-item-icon">
-                          {item.completed ? '✅' : '⭕'}
-                        </span>
-                        <span className={`list-item-text ${item.completed ? 'completed' : ''}`}>
-                          {typeof item === 'string' ? item : item.text || item.name || JSON.stringify(item)}
-                        </span>
-                      </div>
-                    ))}
+                    {list.items.map((item, index) => {
+                      // Ensure item has an ID for operations
+                      const itemWithId = {
+                        id: item.id || `${listId}-${index}`,
+                        text: typeof item === 'string' ? item : item.text || item.name || JSON.stringify(item),
+                        completed: item.completed || false,
+                        ...item
+                      };
+
+                      const isEditing = editingItem && 
+                                      editingItem.listName === listId && 
+                                      editingItem.itemId === itemWithId.id;
+
+                      return (
+                        <div 
+                          key={itemWithId.id} 
+                          className={`list-item ${itemWithId.completed ? 'completed' : 'pending'} interactive`}
+                        >
+                          {/* Main clickable area to toggle completion */}
+                          <div 
+                            className="list-item-main"
+                            onClick={() => !isEditing && toggleItemCompletion(listId, itemWithId)}
+                            title={itemWithId.completed ? 'Click to mark as incomplete' : 'Click to mark as complete'}
+                          >
+                            <span className="list-item-icon">
+                              {itemWithId.completed ? '✅' : '⭕'}
+                            </span>
+                            
+                            {/* Editable text area */}
+                            {isEditing ? (
+                              <input
+                                type="text"
+                                value={editText}
+                                onChange={(e) => setEditText(e.target.value)}
+                                onKeyPress={(e) => {
+                                  if (e.key === 'Enter') {
+                                    saveEdit(listId, itemWithId);
+                                  } else if (e.key === 'Escape') {
+                                    cancelEdit();
+                                  }
+                                }}
+                                onBlur={() => saveEdit(listId, itemWithId)}
+                                className="edit-input"
+                                autoFocus
+                              />
+                            ) : (
+                              <span className={`list-item-text ${itemWithId.completed ? 'completed' : ''}`}>
+                                {itemWithId.text}
+                              </span>
+                            )}
+                          </div>
+                          
+                          {/* Action buttons */}
+                          <div className="list-item-actions">
+                            {!isEditing && (
+                              <>
+                                <button
+                                  className="edit-item-btn"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    startEditing(listId, itemWithId);
+                                  }}
+                                  title="Edit this item"
+                                >
+                                  ✏️
+                                </button>
+                                
+                                {itemWithId.completed && (
+                                  <button
+                                    className="delete-item-btn"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      deleteItem(listId, itemWithId);
+                                    }}
+                                    title="Delete this item"
+                                  >
+                                    🗑️
+                                  </button>
+                                )}
+                              </>
+                            )}
+                            
+                            {isEditing && (
+                              <>
+                                <button
+                                  className="save-item-btn"
+                                  onClick={() => saveEdit(listId, itemWithId)}
+                                  title="Save changes"
+                                >
+                                  ✅
+                                </button>
+                                <button
+                                  className="cancel-item-btn"
+                                  onClick={cancelEdit}
+                                  title="Cancel editing"
+                                >
+                                  ❌
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </CollapsibleSection>
@@ -186,6 +343,7 @@ const ContentDisplay = ({
       </div>
     );
   };
+
 
   // Schedule display
   const renderScheduleContent = () => {

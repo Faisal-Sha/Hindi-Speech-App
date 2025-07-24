@@ -737,6 +737,302 @@ div, span, button, input, h1, h2, h3, p {
   }
 }
 
+/* Make list items interactive */
+.list-item.interactive {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--spacing-md);
+  background: linear-gradient(135deg, var(--card-bg) 0%, white 100%);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  transition: all var(--transition-normal);
+  box-shadow: 0 2px 8px rgba(138, 122, 107, 0.08);
+  cursor: pointer;
+  position: relative;
+}
+
+.list-item.interactive:hover {
+  background: linear-gradient(135deg, var(--pink-light) 0%, var(--card-bg) 100%);
+  border-color: var(--pink);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(138, 122, 107, 0.15);
+}
+
+/* Main clickable area */
+.list-item-main {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  flex: 1;
+  cursor: pointer;
+  padding-right: var(--spacing-sm);
+}
+
+.list-item-main:hover .list-item-icon {
+  transform: scale(1.1);
+}
+
+/* Enhanced icon styling */
+.list-item.interactive .list-item-icon {
+  font-size: 1.2rem;
+  flex-shrink: 0;
+  width: 24px;
+  text-align: center;
+  transition: transform var(--transition-fast);
+}
+
+/* Enhanced text styling */
+.list-item.interactive .list-item-text {
+  flex: 1;
+  color: var(--text-dark);
+  font-size: 1rem;
+  line-height: 1.5;
+  font-weight: 500;
+  transition: all var(--transition-normal);
+}
+
+/* Completed item styles - enhanced */
+.list-item.interactive.completed {
+  background: linear-gradient(135deg, #e8f5e8 0%, #f0f8f0 100%);
+  border-color: #c8e6c9;
+  opacity: 0.85;
+}
+
+.list-item.interactive.completed:hover {
+  background: linear-gradient(135deg, #d4edda 0%, #e8f5e8 100%);
+  opacity: 1;
+}
+
+.list-item.interactive.completed .list-item-text {
+  text-decoration: line-through;
+  color: var(--text-medium);
+  opacity: 0.8;
+}
+
+/* Actions container */
+.list-item-actions {
+  display: flex;
+  gap: var(--spacing-xs);
+  align-items: center;
+  opacity: 0;
+  transition: opacity var(--transition-normal);
+}
+
+/* Show actions on hover or when item is completed */
+.list-item.interactive:hover .list-item-actions,
+.list-item.interactive.completed .list-item-actions {
+  opacity: 1;
+}
+
+/* Delete button styling */
+.delete-item-btn {
+  background: #ff6b6b;
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: all var(--transition-fast);
+  box-shadow: 0 2px 4px rgba(255, 107, 107, 0.3);
+}
+
+.delete-item-btn:hover {
+  background: #ff5252;
+  transform: scale(1.1);
+  box-shadow: 0 3px 8px rgba(255, 107, 107, 0.4);
+}
+
+.delete-item-btn:active {
+  transform: scale(0.95);
+}
+
+/* Prevent text selection on interactive elements */
+.list-item.interactive .list-item-main {
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+}
+
+/* Focus states for accessibility */
+.list-item.interactive:focus {
+  outline: 2px solid var(--pink);
+  outline-offset: 2px;
+}
+
+.delete-item-btn:focus {
+  outline: 2px solid #ff6b6b;
+  outline-offset: 2px;
+}
+
+/* Animation for new items */
+@keyframes slideInScale {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.list-item.interactive {
+  animation: slideInScale 0.3s ease-out;
+}
+
+/* Animation for completion toggle */
+@keyframes completionPulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.1); }
+  100% { transform: scale(1); }
+}
+
+.list-item.interactive .list-item-icon.completing {
+  animation: completionPulse 0.3s ease;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .list-item.interactive {
+    padding: var(--spacing-sm);
+  }
+  
+  .list-item-actions {
+    opacity: 1; /* Always show on mobile */
+  }
+  
+  .delete-item-btn {
+    width: 32px;
+    height: 32px;
+    font-size: 1rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .list-item-main {
+    padding-right: var(--spacing-xs);
+  }
+  
+  .list-item.interactive .list-item-text {
+    font-size: 0.9rem;
+  }
+}
+
+/* ===== STATUS INDICATORS ===== */
+.list-item.interactive::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: var(--primary);
+  border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+  transition: background-color var(--transition-normal);
+}
+
+.list-item.interactive.completed::before {
+  background: #4caf50;
+}
+
+.list-item.interactive.pending::before {
+  background: var(--pink);
+}
+
+/* ===== ADDITIONAL VISUAL ENHANCEMENTS ===== */
+
+/* Subtle gradient overlay on hover */
+.list-item.interactive:hover::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(45deg, transparent 30%, rgba(232, 197, 193, 0.1) 70%);
+  border-radius: var(--radius-md);
+  pointer-events: none;
+}
+
+/* Loading state for items being updated */
+.list-item.interactive.updating {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.list-item.interactive.updating::after {
+  content: '⏳';
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 1rem;
+}
+
+.edit-item-btn,
+.save-item-btn,
+.cancel-item-btn {
+  background: #4caf50;
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: all var(--transition-fast);
+  margin-left: 4px;
+}
+
+.edit-item-btn {
+  background: #f1d6d6;
+}
+
+.edit-item-btn:hover {
+  background: #d59ec4;
+  transform: scale(1.1);
+}
+
+.save-item-btn:hover {
+  background: #ace4af;
+  transform: scale(1.1);
+}
+
+.cancel-item-btn {
+  background: #c19591;
+}
+
+.cancel-item-btn:hover {
+  background: #de8383;
+  transform: scale(1.1);
+}
+
+.edit-input {
+  flex: 1;
+  background: white;
+  border: 2px solid var(--primary);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 1rem;
+  font-weight: 500;
+  color: var(--text-dark);
+}
+
+.edit-input:focus {
+  outline: none;
+  border-color: var(--pink);
+  box-shadow: 0 0 0 2px rgba(232, 197, 193, 0.3);
+}
 /* ===== HEADER SECTION ENHANCEMENTS ===== */
 /* Keep your existing .header styles and add these */
 /*https://i.pinimg.com/736x/0a/f9/39/0af939dfe16d696854629eb0bf9d478b.jpghttps://images.unsplash.com/photo-1589730880765-6adf993bb581?q=80&w=2940&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D

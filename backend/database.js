@@ -332,6 +332,92 @@ async function getUserLists(userId, includeArchived = false) {
     return {};
 }
 }
+
+async function updateListItemStatus(userId, listName, itemId, completed) {
+  try {
+    console.log(`🔄 Updating item ${itemId} in list "${listName}" to completed: ${completed}`);
+    
+    // Update the item directly in the database
+    const result = await pool.query(`
+      UPDATE list_items 
+      SET is_completed = $1, updated_at = CURRENT_TIMESTAMP
+      WHERE id = $2 
+      AND list_id = (
+        SELECT id FROM user_lists 
+        WHERE user_id = $3 AND list_name = $4
+      )
+      RETURNING *
+    `, [completed, itemId, userId, listName]);
+    
+    if (result.rows.length === 0) {
+      throw new Error(`Item with ID ${itemId} not found in list "${listName}" for user ${userId}`);
+    }
+    
+    console.log(`✅ Item ${itemId} completion status updated to: ${completed}`);
+    return result.rows[0];
+    
+  } catch (error) {
+    console.error('❌ Error updating list item status:', error);
+    throw error;
+  }
+}
+
+async function updateListItemText(userId, listName, itemId, newText) {
+  try {
+    console.log(`📝 Updating item ${itemId} text in list "${listName}" to: "${newText}"`);
+    
+    const result = await pool.query(`
+      UPDATE list_items 
+      SET item_text = $1, updated_at = CURRENT_TIMESTAMP
+      WHERE id = $2 
+      AND list_id = (
+        SELECT id FROM user_lists 
+        WHERE user_id = $3 AND list_name = $4
+      )
+      RETURNING *
+    `, [newText, itemId, userId, listName]);
+    
+    if (result.rows.length === 0) {
+      throw new Error(`Item with ID ${itemId} not found in list "${listName}" for user ${userId}`);
+    }
+    
+    console.log(`✅ Item ${itemId} text updated successfully`);
+    return result.rows[0];
+    
+  } catch (error) {
+    console.error('❌ Error updating list item text:', error);
+    throw error;
+  }
+}
+
+
+async function deleteListItem(userId, listName, itemId) {
+  try {
+    console.log(`🗑️ Deleting item ${itemId} from list "${listName}"`);
+    
+    // Delete the item from the database
+    const result = await pool.query(`
+      DELETE FROM list_items 
+      WHERE id = $1 
+      AND list_id = (
+        SELECT id FROM user_lists 
+        WHERE user_id = $2 AND list_name = $3
+      )
+      RETURNING *
+    `, [itemId, userId, listName]);
+    
+    if (result.rows.length === 0) {
+      throw new Error(`Item with ID ${itemId} not found in list "${listName}" for user ${userId}`);
+    }
+    
+    console.log(`✅ Item ${itemId} deleted successfully`);
+    return result.rows[0];
+    
+  } catch (error) {
+    console.error('❌ Error deleting list item:', error);
+    throw error;
+  }
+}
   
 //SCHEDULE 
 
@@ -359,6 +445,8 @@ async function createUserSchedule(userId, scheduleName, scheduleType = 'personal
       throw error;
   }
 }
+
+
 
 async function addEventToSchedule(userId, scheduleName, eventTitle, startTime, options = {}) {
   try {
@@ -932,6 +1020,9 @@ module.exports = {
     createUserList,
     addItemToList,
     getUserLists,
+    updateListItemStatus, 
+    updateListItemText,
+    deleteListItem,
     createUserSchedule,
     addEventToSchedule,
     getUserSchedules,
