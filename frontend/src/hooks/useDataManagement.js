@@ -344,6 +344,36 @@ const useDataManagement = (messages = []) => { // Default empty array to prevent
               }
             });
             break;
+        
+        case 'delete_list':
+          console.log('🗑️ Deleting list with data:', action.data);
+          
+          const listToDelete = action.data?.name || action.data?.listName;
+          if (!listToDelete) {
+            console.error('❌ No list name provided for deletion');
+            break;
+          }
+          
+          setUserLists(prev => {
+            const matchingListName = findBestMatchingItem(listToDelete, prev, 'list');
+            
+            if (matchingListName && prev[matchingListName]) {
+              console.log(`🗑️ Deleting list: "${matchingListName}"`);
+              
+              // Create new state without the deleted list
+              const newState = { ...prev };
+              delete newState[matchingListName];
+              
+              console.log(`✅ List "${matchingListName}" deleted from frontend state`);
+              return newState;
+            } else {
+              console.error(`❌ List "${listToDelete}" not found for deletion`);
+              return prev;
+            }
+          });
+          break;
+          
+            
                     
         case 'create_schedule':
           console.log('📅 Creating schedule with data:', action.data);
@@ -482,19 +512,128 @@ const useDataManagement = (messages = []) => { // Default empty array to prevent
               });
               break;
             
+            case 'edit_event':
+              console.log('📝 Editing event with data:', action.data);
+              
+              const editEventSchedule = action.data?.scheduleName || action.data?.schedule;
+              const editEventId = action.data?.eventId;
+              const eventUpdates = action.data?.updates || {};
+              
+              if (!editEventSchedule || !editEventId || !eventUpdates) {
+                console.error('❌ Schedule name, event ID, and updates required for edit_event');
+                break;
+              }
+              
+              setUserSchedules(prev => {
+                const matchingScheduleName = findBestMatchingItem(editEventSchedule, prev, 'schedule');
+                
+                if (matchingScheduleName && prev[matchingScheduleName]) {
+                  const scheduleToUpdate = prev[matchingScheduleName];
+                  let updatedEvents = [...scheduleToUpdate.events];
+                  
+                  // Find and update the event
+                  const eventIndex = updatedEvents.findIndex(event => 
+                    event.id === editEventId || event.id === parseInt(editEventId)
+                  );
+                  
+                  if (eventIndex !== -1) {
+                    const originalEvent = updatedEvents[eventIndex];
+                    
+                    // Apply updates to the event
+                    updatedEvents[eventIndex] = {
+                      ...originalEvent,
+                      ...eventUpdates,
+                      lastUpdated: new Date()
+                    };
+                    
+                    console.log(`📝 Updated event "${originalEvent.title}" in schedule "${matchingScheduleName}"`);
+                    console.log(`📝 Applied updates:`, Object.keys(eventUpdates));
+                    
+                    const updatedSchedule = {
+                      ...scheduleToUpdate,
+                      events: updatedEvents,
+                      lastUpdated: new Date()
+                    };
+                    
+                    return { ...prev, [matchingScheduleName]: updatedSchedule };
+                  } else {
+                    console.error(`❌ Event ${editEventId} not found in schedule "${matchingScheduleName}"`);
+                    return prev;
+                  }
+                } else {
+                  console.error(`❌ Schedule "${editEventSchedule}" not found for event editing`);
+                  return prev;
+                }
+              });
+              break;
+
+            case 'delete_event':
+              console.log('🗑️ Deleting event with data:', action.data);
+              
+              const deleteEventSchedule = action.data?.scheduleName || action.data?.schedule;
+              const deleteEventId = action.data?.eventId;
+              
+              if (!deleteEventSchedule || !deleteEventId) {
+                console.error('❌ Schedule name and event ID required for delete_event');
+                break;
+              }
+              
+              setUserSchedules(prev => {
+                const matchingScheduleName = findBestMatchingItem(deleteEventSchedule, prev, 'schedule');
+                
+                if (matchingScheduleName && prev[matchingScheduleName]) {
+                  const scheduleToUpdate = prev[matchingScheduleName];
+                  let updatedEvents = [...scheduleToUpdate.events];
+                  
+                  // Find and remove the event
+                  const eventIndex = updatedEvents.findIndex(event => 
+                    event.id === deleteEventId || event.id === parseInt(deleteEventId)
+                  );
+                  
+                  if (eventIndex !== -1) {
+                    const deletedEvent = updatedEvents[eventIndex];
+                    updatedEvents.splice(eventIndex, 1);
+                    
+                    console.log(`🗑️ Deleted event "${deletedEvent.title}" from schedule "${matchingScheduleName}"`);
+                    
+                    const updatedSchedule = {
+                      ...scheduleToUpdate,
+                      events: updatedEvents,
+                      lastUpdated: new Date()
+                    };
+                    
+                    return { ...prev, [matchingScheduleName]: updatedSchedule };
+                  } else {
+                    console.error(`❌ Event ${deleteEventId} not found in schedule "${matchingScheduleName}"`);
+                    return prev;
+                  }
+                } else {
+                  console.error(`❌ Schedule "${deleteEventSchedule}" not found for event deletion`);
+                  return prev;
+                }
+              });
+              break;
+            
             case 'delete_schedule':
               console.log('🗑️ Deleting schedule with data:', action.data);
               
               const scheduleToDelete = action.data?.name || action.data?.scheduleName;
+              if (!scheduleToDelete) {
+                console.error('❌ No schedule name provided for deletion');
+                break;
+              }
               
               setUserSchedules(prev => {
                 const matchingScheduleName = findBestMatchingItem(scheduleToDelete, prev, 'schedule');
                 
                 if (matchingScheduleName && prev[matchingScheduleName]) {
+                  console.log(`🗑️ Deleting schedule: "${matchingScheduleName}"`);
+                  
+                  // Create new state without the deleted schedule
                   const newState = { ...prev };
                   delete newState[matchingScheduleName];
                   
-                  console.log(`✅ Deleted schedule "${matchingScheduleName}"`);
+                  console.log(`✅ Schedule "${matchingScheduleName}" deleted from frontend state`);
                   return newState;
                 } else {
                   console.error(`❌ Schedule "${scheduleToDelete}" not found for deletion`);
@@ -503,56 +642,6 @@ const useDataManagement = (messages = []) => { // Default empty array to prevent
               });
               break;
             
-            case 'update_event':
-              console.log('📅 Updating event with data:', action.data);
-              
-              const targetSchedule = action.data?.scheduleName || action.data?.schedule;
-              const eventId = action.data?.eventId;
-              const eventOperation = action.data?.operation; // 'edit', 'delete', 'reschedule'
-              const eventUpdates = action.data?.updates || {};
-              
-              setUserSchedules(prev => {
-                const matchingScheduleName = findBestMatchingItem(targetSchedule, prev, 'schedule');
-                
-                if (matchingScheduleName && prev[matchingScheduleName]) {
-                  const scheduleToUpdate = prev[matchingScheduleName];
-                  let updatedEvents = [...scheduleToUpdate.events];
-                  
-                  if (eventId) {
-                    const eventIndex = updatedEvents.findIndex(event => event.id === eventId);
-                    if (eventIndex !== -1) {
-                      switch (eventOperation) {
-                        case 'edit':
-                          updatedEvents[eventIndex] = { 
-                            ...updatedEvents[eventIndex], 
-                            ...eventUpdates,
-                            lastUpdated: new Date() 
-                          };
-                          break;
-                        case 'delete':
-                          updatedEvents.splice(eventIndex, 1);
-                          break;
-                        default:
-                          console.error(`❌ Unknown event operation: ${eventOperation}`);
-                          return prev;
-                      }
-                    }
-                  }
-                  
-                  const updatedSchedule = {
-                    ...scheduleToUpdate,
-                    events: updatedEvents,
-                    lastUpdated: new Date()
-                  };
-                  
-                  console.log(`✅ Updated schedule "${matchingScheduleName}"`);
-                  return { ...prev, [matchingScheduleName]: updatedSchedule };
-                } else {
-                  console.error(`❌ Schedule "${targetSchedule}" not found for event update`);
-                  return prev;
-                }
-              });
-              break;
                       
           case 'create_memory':
             console.log('🧠 Creating memory category with data:', action.data);

@@ -1,453 +1,529 @@
-/* UserSelector.css - Dedicated styles for the UserSelector component */
+/* UserSelector.css - Warm & Cozy Theme to match main interface */
 
-/* ===== CONTAINER ===== */
+/* ===== IMPORT CSS VARIABLES FROM MAIN APP ===== */
+/* These match your App.css variables exactly */
+:root {
+  /* Essential color variables */
+  --primary: #C8A882;          /* Warm caramel - main accent */
+  --secondary: #E4C4A0;        /* Soft peachy cream */
+  --tertiary: #B5967A;         /* Rich warm brown */
+  --pink: #E8C5C1;             /* Soft dusty pink */
+  --pink-light: #F2DDD9;       /* Very light pink */
+  --pink-medium: #D4A5A0;      /* Medium dusty pink */
+  --background: #FAF8F5;       /* Warm off-white */
+  --card-bg: #F7F3EE;          /* Cream white */
+  --section-bg: #F0EBE3;       /* Warm beige */
+  --text-dark: #4A3C2A;        /* Warm dark brown */
+  --text-medium: #6B5B47;      /* Medium warm brown */
+  --text-light: #8A7A6B;       /* Light warm brown */
+  --border: #E6D5C3;           /* Soft warm border */
+  --shadow-soft: rgba(138, 122, 107, 0.12);
+  
+  /* Spacing system */
+  --spacing-xs: 8px;
+  --spacing-sm: 12px;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+  --spacing-xl: 32px;
+  
+  /* Border radius */
+  --radius-sm: 6px;
+  --radius-md: 12px;
+  --radius-lg: 20px;
+  
+  /* Transitions */
+  --transition-fast: 0.2s ease;
+  --transition-normal: 0.3s ease;
+}
+
+/* ===== MAIN CONTAINER - WARM BACKGROUND WITH IMAGE ===== */
 .user-selector-container {
-    min-height: 100vh;
-    background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 32px;
-  }
-  
-  .user-selector-content {
-    max-width: 1200px;
-    width: 100%;
-  }
-  
-  /* ===== LOADING SCREEN ===== */
-  .loading-screen {
-    text-align: center;
-    color: white;
-  }
-  
-  .loading-spinner {
-    font-size: 60px;
-    margin-bottom: 20px;
-    animation: spin 2s linear infinite;
-  }
-  
-  .loading-text {
-    font-size: 24px;
-    font-weight: bold;
-    margin: 0;
-  }
-  
-  @keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
-  }
-  
-  /* ===== HEADER ===== */
-  .user-selector-header {
-    text-align: center;
-    margin-bottom: 48px;
+  min-height: 100vh;
+  /* Added the same beautiful background image from your main interface! */
+  background: linear-gradient(135deg, rgba(250, 248, 245, 0.85) 0%, rgba(251, 249, 244, 0.85) 100%), 
+              url('https://i.pinimg.com/1200x/bd/0b/f6/bd0bf6f8445820b81fdd095bebc623f2.jpg');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+.user-selector-content {
+  max-width: 1200px;
+  width: 100%;
+}
+
+/* ===== LOADING SCREEN - WARM COLORS ===== */
+.loading-screen {
+  text-align: center;
+  color: var(--text-dark); /* Changed from white to warm dark brown */
+}
+
+.loading-spinner {
+  font-size: 60px;
+  margin-bottom: 20px;
+  animation: spin 2s linear infinite;
+  /* Adding a warm color to the spinner */
+  color: var(--primary);
+}
+
+.loading-text {
+  font-size: 24px;
+  font-weight: bold;
+  margin: 0;
+  color: var(--text-dark);
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* ===== HEADER - WARM STYLED LIKE YOUR MAIN APP ===== */
+.user-selector-header {
+  text-align: center;
+  margin-bottom: 48px;
+  /* Enhanced background styling with image overlay like your main header */
+  background: linear-gradient(135deg, rgba(232, 197, 193, 0.3) 0%, rgba(228, 196, 160, 0.3) 100%), 
+              rgba(255, 255, 255, 0.7);
+  padding: 40px 20px;
+  border-radius: var(--radius-lg);
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  box-shadow: 0 8px 32px var(--shadow-soft);
+  backdrop-filter: blur(10px);
+}
+
+.main-title {
+  font-size: 48px;
+  font-weight: bold;
+  color: var(--text-dark); /* Changed from white to warm dark brown */
+  margin-bottom: 16px;
+  text-shadow: 2px 2px 4px rgba(74, 60, 42, 0.1); /* Subtle warm shadow */
+  margin: 0 0 16px 0;
+}
+
+.subtitle {
+  font-size: 28px;
+  color: var(--text-medium); /* Changed from light purple to warm medium brown */
+  margin-bottom: 8px;
+  margin: 0 0 8px 0;
+}
+
+.tagline {
+  font-size: 20px;
+  color: var(--text-light); /* Changed from light blue to warm light brown */
+  margin: 0;
+  font-style: italic;
+}
+
+/* ===== USERS GRID ===== */
+.users-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 24px;
+  margin-bottom: 32px;
+}
+
+/* ===== USER CARD - WHITE WITH WARM BORDERS & ENHANCED STYLING ===== */
+.user-card {
+  position: relative;
+  /* Enhanced white background with subtle warm overlay */
+  background: rgba(255, 255, 255, 0.95);
+  /* Changed from white borders to warm borders */
+  border: 2px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  cursor: pointer;
+  transition: all var(--transition-normal);
+  transform: scale(1);
+  /* Enhanced shadow for depth */
+  box-shadow: 0 8px 25px var(--shadow-soft);
+  backdrop-filter: blur(10px);
+}
+
+.user-card:hover {
+  /* Enhanced hover effect with better contrast */
+  background: rgba(255, 255, 255, 0.98);
+  background-image: linear-gradient(135deg, rgba(242, 221, 217, 0.3) 0%, rgba(255, 255, 255, 0.8) 100%);
+  border-color: var(--pink);
+  transform: scale(1.05);
+  box-shadow: 0 12px 35px var(--shadow-soft);
+}
+
+.user-card:hover .delete-user-btn {
+  opacity: 1;
+}
+
+/* ===== DELETE BUTTON - WARM STYLED ===== */
+.delete-user-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: var(--pink-medium); /* Changed from red to warm pink */
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  font-size: 12px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.delete-user-btn:hover {
+  background: var(--pink); /* Slightly lighter on hover */
+  transform: scale(1.1);
+}
+
+/* ===== USER AVATAR SECTION - WARM TEXT ===== */
+.user-avatar-section {
+  text-align: center;
+  margin-bottom: 16px;
+}
+
+.user-avatar-large {
+  font-size: 64px;
+  margin-bottom: 8px;
+  filter: drop-shadow(2px 2px 4px rgba(138, 122, 107, 0.3)); /* Warm shadow */
+}
+
+.user-display-name {
+  font-size: 20px;
+  font-weight: bold;
+  color: var(--text-dark); /* Changed from white to warm dark brown */
+  margin-bottom: 4px;
+  margin: 0 0 4px 0;
+  /* Removed harsh white shadow, added subtle warm shadow */
+  text-shadow: 1px 1px 2px rgba(138, 122, 107, 0.2);
+}
+
+.user-language-info {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--text-medium); /* Changed from light blue to warm medium brown */
+}
+
+.language-flag {
+  font-size: 16px;
+}
+
+.language-name {
+  font-weight: 500;
+}
+
+/* ===== USER STATS - WARM COLORS ===== */
+.user-stats {
+  font-size: 12px;
+  text-align: center;
+  color: var(--text-light); /* Changed from light blue to warm light brown */
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+.stat-item {
+  padding: 2px 0;
+}
+
+/* ===== LAST ACTIVE - WARM STYLING ===== */
+.last-active {
+  font-size: 11px;
+  text-align: center;
+  color: var(--text-medium); /* Changed from light purple to warm medium brown */
+  font-style: italic;
+}
+
+/* ===== ADD USER SECTION ===== */
+.add-user-section {
+  text-align: center;
+}
+
+.add-user-btn {
+  /* Changed from green to warm gradient matching your main app buttons */
+  background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+  color: var(--text-dark); /* Dark text like your main app buttons */
+  border: 2px solid var(--tertiary);
+  padding: 16px 32px;
+  border-radius: var(--radius-lg);
+  font-size: 18px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all var(--transition-normal);
+  box-shadow: 0 4px 15px var(--shadow-soft);
+}
+
+.add-user-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px var(--shadow-soft);
+  background: linear-gradient(135deg, var(--secondary) 0%, var(--primary) 100%);
+}
+
+/* ===== MODAL - WHITE WITH WARM STYLING ===== */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  /* Softer overlay with warm tint */
+  background: rgba(74, 60, 42, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  /* White background like your main app cards */
+  background: white;
+  border-radius: var(--radius-lg);
+  padding: 32px;
+  margin: 32px;
+  max-width: 500px;
+  width: 100%;
+  /* Warm border and shadow */
+  border: 2px solid var(--border);
+  box-shadow: 0 8px 32px var(--shadow-soft);
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.modal-title {
+  font-size: 24px;
+  font-weight: bold;
+  color: var(--text-dark);
+  margin-bottom: 24px;
+  text-align: center;
+  margin: 0 0 24px 0;
+}
+
+/* ===== FORM STYLING - WARM THEME ===== */
+.form-group {
+  margin-bottom: 20px;
+}
+
+.form-label {
+  display: block;
+  font-weight: 600;
+  color: var(--text-dark);
+  margin-bottom: 8px;
+  font-size: 14px;
+}
+
+.form-input,
+.form-select {
+  width: 100%;
+  padding: 12px 16px;
+  border: 2px solid var(--border);
+  border-radius: var(--radius-md);
+  font-size: 16px;
+  color: var(--text-dark);
+  background: white;
+  transition: all var(--transition-normal);
+}
+
+.form-input:focus,
+.form-select:focus {
+  outline: none;
+  border-color: var(--pink);
+  box-shadow: 0 0 0 3px rgba(232, 197, 193, 0.3);
+}
+
+/* ===== AVATAR GRID - WARM STYLING ===== */
+.avatar-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.avatar-option {
+  padding: 12px;
+  border: 2px solid var(--border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  text-align: center;
+  font-size: 24px;
+  transition: all var(--transition-normal);
+  background: white;
+}
+
+.avatar-option:hover {
+  background: var(--pink-light);
+  border-color: var(--pink);
+  transform: scale(1.1);
+}
+
+.avatar-option.selected {
+  background: linear-gradient(135deg, var(--pink) 0%, var(--pink-medium) 100%);
+  border-color: var(--pink-medium);
+  color: white;
+}
+
+/* ===== FORM BUTTONS - WARM STYLING ===== */
+.form-buttons {
+  display: flex;
+  gap: 16px;
+  justify-content: flex-end;
+  margin-top: 24px;
+}
+
+.btn {
+  padding: 12px 24px;
+  border: none;
+  border-radius: var(--radius-md);
+  font-weight: bold;
+  cursor: pointer;
+  transition: all var(--transition-normal);
+  font-size: 14px;
+}
+
+.btn-primary {
+  /* Using your warm primary colors instead of blue */
+  background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+  color: var(--text-dark);
+  border: 2px solid var(--tertiary);
+}
+
+.btn-primary:hover {
+  background: linear-gradient(135deg, var(--secondary) 0%, var(--primary) 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px var(--shadow-soft);
+}
+
+.btn-secondary {
+  /* Using warm grays instead of cold grays */
+  background: var(--text-light);
+  color: white;
+  border: 2px solid var(--text-medium);
+}
+
+.btn-secondary:hover {
+  background: var(--text-medium);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(107, 91, 71, 0.3);
+}
+
+/* ===== NO USERS STATE - WARM WELCOME ===== */
+.no-users-state {
+  text-align: center;
+  color: var(--text-dark); /* Changed from white to warm dark */
+  padding: 40px 20px;
+  /* Adding warm background like a card */
+  background: white;
+  border-radius: var(--radius-lg);
+  border: 2px solid var(--border);
+  box-shadow: 0 4px 15px var(--shadow-soft);
+}
+
+.welcome-emoji {
+  font-size: 64px;
+  margin-bottom: 16px;
+  filter: drop-shadow(2px 2px 4px var(--shadow-soft));
+}
+
+.welcome-title {
+  font-size: 24px;
+  font-weight: bold;
+  margin-bottom: 16px;
+  margin: 0 0 16px 0;
+  color: var(--text-dark);
+  text-shadow: none; /* Removing harsh shadow */
+}
+
+.welcome-description {
+  font-size: 18px;
+  color: var(--text-medium); /* Changed from light blue to warm medium */
+  margin-bottom: 24px;
+  margin: 0 0 24px 0;
+  line-height: 1.5;
+}
+
+/* ===== RESPONSIVE DESIGN ===== */
+@media (max-width: 768px) {
+  .user-selector-container {
+    padding: 16px;
   }
   
   .main-title {
-    font-size: 48px;
-    font-weight: bold;
-    color: white;
-    margin-bottom: 16px;
-    text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
-    margin: 0 0 16px 0;
+    font-size: 36px;
   }
   
   .subtitle {
-    font-size: 28px;
-    color: #e1bee7;
-    margin-bottom: 8px;
-    margin: 0 0 8px 0;
+    font-size: 24px;
   }
   
   .tagline {
-    font-size: 20px;
-    color: #bbdefb;
-    margin: 0;
-  }
-  
-  /* ===== USERS GRID ===== */
-  .users-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-    gap: 24px;
-    margin-bottom: 32px;
-  }
-  
-  /* ===== USER CARD ===== */
-  .user-card {
-    position: relative;
-    background: rgba(255, 255, 255, 0.1);
-    backdrop-filter: blur(10px);
-    border: 2px solid rgba(255, 255, 255, 0.2);
-    border-radius: 16px;
-    padding: 24px;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    transform: scale(1);
-  }
-  
-  .user-card:hover {
-    background: rgba(255, 255, 255, 0.2);
-    border-color: rgba(255, 255, 255, 0.4);
-    transform: scale(1.05);
-  }
-  
-  .user-card:hover .delete-user-btn {
-    opacity: 1;
-  }
-  
-  /* ===== DELETE BUTTON ===== */
-  .delete-user-btn {
-    position: absolute;
-    top: 8px;
-    right: 8px;
-    background: #f44336;
-    color: white;
-    border: none;
-    border-radius: 50%;
-    width: 24px;
-    height: 24px;
-    font-size: 12px;
-    cursor: pointer;
-    opacity: 0;
-    transition: opacity 0.3s ease;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-  
-  .delete-user-btn:hover {
-    background: #d32f2f;
-  }
-  
-  /* ===== USER AVATAR SECTION ===== */
-  .user-avatar-section {
-    text-align: center;
-    margin-bottom: 16px;
-  }
-  
-  .user-avatar-large {
-    font-size: 64px;
-    margin-bottom: 8px;
-    filter: drop-shadow(2px 2px 4px rgba(0,0,0,0.3));
-  }
-  
-  .user-display-name {
-    font-size: 20px;
-    font-weight: bold;
-    color: white;
-    margin-bottom: 4px;
-    margin: 0 0 4px 0;
-    text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
-  }
-  
-  .user-language-info {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    font-size: 14px;
-    color: #bbdefb;
-  }
-  
-  .language-flag {
     font-size: 16px;
   }
   
-  .language-name {
-    font-weight: 500;
+  .users-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
   }
   
-  /* ===== USER STATS ===== */
-  .user-stats {
-    font-size: 12px;
-    text-align: center;
-    color: #e3f2fd;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    margin-bottom: 12px;
-  }
-  
-  .stat-item {
-    padding: 2px 0;
-  }
-  
-  /* ===== LAST ACTIVE ===== */
-  .last-active {
-    font-size: 11px;
-    text-align: center;
-    color: #e1bee7;
-    font-style: italic;
-  }
-  
-  /* ===== ADD USER SECTION ===== */
-  .add-user-section {
-    text-align: center;
-  }
-  
-  .add-user-btn {
-    background: #4caf50;
-    color: white;
-    border: none;
-    padding: 16px 32px;
-    border-radius: 16px;
-    font-size: 18px;
-    font-weight: bold;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    box-shadow: 0 4px 15px rgba(76, 175, 80, 0.3);
-  }
-  
-  .add-user-btn:hover {
-    background: #45a049;
-    transform: scale(1.05);
-    box-shadow: 0 6px 20px rgba(76, 175, 80, 0.4);
-  }
-  
-  /* ===== MODAL ===== */
-  .modal-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: rgba(0, 0, 0, 0.5);
-    display: flex;
-    align-items: center;
-    justify-content: center;
+  .user-card {
     padding: 16px;
-    z-index: 1000;
   }
   
   .modal-content {
-    background: white;
-    border-radius: 16px;
-    padding: 32px;
-    max-width: 400px;
-    width: 100%;
-    max-height: 90vh;
-    overflow-y: auto;
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    padding: 20px;
+    margin: 16px;
   }
   
-  .modal-title {
-    font-size: 24px;
-    font-weight: bold;
-    color: #333;
-    margin-bottom: 24px;
-    margin: 0 0 24px 0;
-    text-align: center;
-  }
-  
-  /* ===== FORM ===== */
-  .form-container {
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-  }
-  
-  .form-field {
-    display: flex;
-    flex-direction: column;
-  }
-  
-  .form-label {
-    font-size: 14px;
-    font-weight: 500;
-    color: #555;
-    margin-bottom: 8px;
-    display: block;
-  }
-  
-  .form-input, .form-select {
-    width: 100%;
-    padding: 12px;
-    border: 1px solid #ddd;
-    border-radius: 8px;
-    font-size: 14px;
-    box-sizing: border-box;
-    transition: border-color 0.3s ease;
-  }
-  
-  .form-input:focus, .form-select:focus {
-    outline: none;
-    border-color: #2196f3;
-    box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.2);
-  }
-  
-  .form-input::placeholder {
-    color: #999;
-  }
-  
-  /* ===== AVATAR GRID ===== */
   .avatar-grid {
-    display: grid;
-    grid-template-columns: repeat(6, 1fr);
-    gap: 8px;
-    margin-top: 8px;
+    grid-template-columns: repeat(4, 1fr);
   }
   
-  .avatar-option {
-    padding: 8px;
-    font-size: 24px;
-    border: 2px solid #ddd;
-    border-radius: 8px;
-    background: white;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    aspect-ratio: 1;
-  }
-  
-  .avatar-option:hover {
-    border-color: #2196f3;
-    background: #f5f5f5;
-    transform: scale(1.05);
-  }
-  
-  .avatar-option.selected {
-    border-color: #2196f3;
-    background: #e3f2fd;
-    box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.2);
-  }
-  
-  /* ===== FORM BUTTONS ===== */
   .form-buttons {
-    display: flex;
-    gap: 16px;
-    margin-top: 16px;
+    flex-direction: column;
   }
   
-  .btn-primary, .btn-secondary {
-    flex: 1;
-    padding: 12px;
-    border: none;
-    border-radius: 8px;
-    font-weight: bold;
-    cursor: pointer;
-    transition: all 0.2s ease;
+  .user-selector-header {
+    padding: 24px 16px;
+  }
+}
+
+@media (max-width: 480px) {
+  .main-title {
+    font-size: 28px;
+  }
+  
+  .subtitle {
+    font-size: 20px;
+  }
+  
+  .tagline {
     font-size: 14px;
   }
   
-  .btn-primary {
-    background: #2196f3;
-    color: white;
+  .user-avatar-large {
+    font-size: 48px;
   }
   
-  .btn-primary:hover {
-    background: #1976d2;
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(33, 150, 243, 0.3);
-  }
-  
-  .btn-secondary {
-    background: #757575;
-    color: white;
-  }
-  
-  .btn-secondary:hover {
-    background: #616161;
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(117, 117, 117, 0.3);
-  }
-  
-  /* ===== NO USERS STATE ===== */
-  .no-users-state {
-    text-align: center;
-    color: white;
-    padding: 40px 20px;
-  }
-  
-  .welcome-emoji {
-    font-size: 64px;
-    margin-bottom: 16px;
-    filter: drop-shadow(2px 2px 4px rgba(0,0,0,0.3));
-  }
-  
-  .welcome-title {
-    font-size: 24px;
-    font-weight: bold;
-    margin-bottom: 16px;
-    margin: 0 0 16px 0;
-    text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
-  }
-  
-  .welcome-description {
+  .user-display-name {
     font-size: 18px;
-    color: #bbdefb;
-    margin-bottom: 24px;
-    margin: 0 0 24px 0;
-    line-height: 1.5;
   }
   
-  /* ===== RESPONSIVE DESIGN ===== */
-  @media (max-width: 768px) {
-    .user-selector-container {
-      padding: 16px;
-    }
-    
-    .main-title {
-      font-size: 36px;
-    }
-    
-    .subtitle {
-      font-size: 24px;
-    }
-    
-    .tagline {
-      font-size: 16px;
-    }
-    
-    .users-grid {
-      grid-template-columns: 1fr;
-      gap: 16px;
-    }
-    
-    .user-card {
-      padding: 16px;
-    }
-    
-    .modal-content {
-      padding: 20px;
-      margin: 16px;
-    }
-    
-    .avatar-grid {
-      grid-template-columns: repeat(4, 1fr);
-    }
-    
-    .form-buttons {
-      flex-direction: column;
-    }
+  .add-user-btn {
+    padding: 12px 24px;
+    font-size: 16px;
   }
   
-  @media (max-width: 480px) {
-    .main-title {
-      font-size: 28px;
-    }
-    
-    .subtitle {
-      font-size: 20px;
-    }
-    
-    .tagline {
-      font-size: 14px;
-    }
-    
-    .user-avatar-large {
-      font-size: 48px;
-    }
-    
-    .user-display-name {
-      font-size: 18px;
-    }
-    
-    .add-user-btn {
-      padding: 12px 24px;
-      font-size: 16px;
-    }
+  .user-selector-header {
+    padding: 20px 12px;
   }
+}

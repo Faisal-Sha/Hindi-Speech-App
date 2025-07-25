@@ -1,27 +1,31 @@
 const express = require('express');
 const { OpenAI } = require('openai');
 const {
-    pool,
-    ensureUser,
-    ensureUserWithProfile,
-    getUserProfile,
-    getUserData,
-    saveUserData, 
-    saveConversation,
-    createUserList,
-    addItemToList,
-    getUserLists,
-    updateListItemStatus,
-    updateListItemText,
-    deleteListItem,
-    createUserSchedule,
-    addEventToSchedule,
-    getUserSchedules,
-    createMemoryCategory,
-    addMemoryItem,
-    getUserMemories,
-    getAllUserData, 
-    buildSmartContext
+  pool,
+  ensureUser,
+  ensureUserWithProfile,
+  getUserProfile,
+  getUserData,
+  saveUserData, 
+  saveConversation,
+  createUserList,
+  addItemToList,
+  getUserLists,
+  updateListItemStatus, 
+  updateListItemText,
+  deleteListItem,
+  deleteUserList, 
+  createUserSchedule,
+  addEventToSchedule,
+  getUserSchedules,
+  updateEvent, 
+  deleteEvent, 
+  deleteUserSchedule,
+  createMemoryCategory, 
+  addMemoryItem,
+  getUserMemories,
+  getAllUserData, 
+  buildSmartContext
 } = require('./database');
 
 const router = express.Router();
@@ -54,14 +58,17 @@ const SYSTEM_PROMPT = `You are an intelligent multilingual personal assistant. Y
     - create_list: Create new lists (any type: shopping, todo, books, movies, travel, etc.)
     - add_to_list: Add items to existing lists (RESPECT user's specified list name)
     - update_list: Mark items as complete, edit, or remove
+    - delete_list: Delete entire lists
     - create_schedule: Create schedule categories
     - add_event: Add events/appointments to schedules  
     - update_event: Modify or cancel events
+    - delete_event: Delete individual events from schedules
+    - edit_event: Edit/modify individual events in schedules
+    - delete_schedule: Delete entire schedules
     - create_memory: Create memory categories (contacts, notes, passwords, etc.)
     - store_memory: Store any information in memory
-    - delete_list: Delete entire lists
-    - delete_schedule: Delete entire schedules  
     - delete_memory: Delete entire memory categories
+
 
     📋 RESPONSE FORMAT - ALWAYS return valid JSON:
     {
@@ -96,6 +103,8 @@ const SYSTEM_PROMPT = `You are an intelligent multilingual personal assistant. Y
     "response": "Added milk and bread to your shopping list!",
     "actions": [{"type": "add_to_list", "data": {"listName": "Shopping List", "items": ["milk", "bread"]}}]
     }
+
+    
 
     User: "delete the shopping list"
     {
@@ -164,7 +173,23 @@ const SYSTEM_PROMPT = `You are an intelligent multilingual personal assistant. Y
         }
       }]
     }
+      User: "remove the work schedule"
+    {
+      "response": "I've deleted your work schedule!",
+      "actions": [{"type": "delete_schedule", "data": {"name": "Work Schedule"}}]
+    }
 
+    User: "cancel the 3pm meeting"
+    {
+      "response": "I've cancelled your 3pm meeting!",
+      "actions": [{"type": "delete_event", "data": {"scheduleName": "Work Schedule", "eventId": 123}}]
+    }
+
+    User: "change the meeting time to 4pm"
+    {
+      "response": "I've updated your meeting time to 4pm!",
+      "actions": [{"type": "edit_event", "data": {"scheduleName": "Work Schedule", "eventId": 123, "updates": {"startTime": "2024-01-15T16:00:00Z"}}}]
+    }
 
     🧠 MEMORY MANAGEMENT FORMAT:
 
@@ -572,33 +597,15 @@ async function processAIActions(userId, actions) {
                   throw new Error('List name is required for delete_list');
               }
               
-              // First, get the list ID
-              const listQuery = await pool.query(
-                  'SELECT id FROM user_lists WHERE user_id = $1 AND list_name = $2',
-                  [userId, listToDelete]
-              );
-              
-              if (listQuery.rows.length === 0) {
-                  throw new Error(`List "${listToDelete}" not found for user ${userId}`);
-              }
-              
-              const listId = listQuery.rows[0].id;
-              
-              // Delete all items in the list first
-              await pool.query('DELETE FROM list_items WHERE list_id = $1', [listId]);
-              
-              // Then delete the list itself
-              const deleteResult = await pool.query(
-                  'DELETE FROM user_lists WHERE id = $1 RETURNING *',
-                  [listId]
-              );
+              const deleteListResult = await deleteUserList(userId, listToDelete);
               
               results.push({ 
                   success: true, 
                   type: 'delete_list', 
                   data: { 
                       listName: listToDelete,
-                      deletedList: deleteResult.rows[0]
+                      deletedList: deleteListResult,
+                      deletedItemsCount: deleteListResult.deletedItemsCount
                   } 
               });
               break;
@@ -672,6 +679,74 @@ async function processAIActions(userId, actions) {
                   } 
               });
               break;
+
+            case 'edit_event':
+              console.log('📝 Editing event...');
+              const editEventData = action.data;
+              const { scheduleName: editSchedule, eventId: editEventId, updates } = editEventData;
+              
+              if (!editSchedule || !editEventId || !updates) {
+                  throw new Error('Schedule name, event ID, and updates are required for edit_event');
+              }
+              
+              const editEventResult = await updateEvent(userId, editSchedule, editEventId, updates);
+              
+              results.push({ 
+                  success: true, 
+                  type: 'edit_event', 
+                  data: { 
+                      scheduleName: editSchedule,
+                      eventId: editEventId,
+                      updatedEvent: editEventResult,
+                      appliedUpdates: Object.keys(updates)
+                  } 
+              });
+              break;
+
+            case 'delete_event':
+              console.log('🗑️ Deleting event...');
+              const deleteEventData = action.data;
+              const { scheduleName: eventSchedule, eventId } = deleteEventData;
+              
+              if (!eventSchedule || !eventId) {
+                  throw new Error('Schedule name and event ID are required for delete_event');
+              }
+              
+              const deleteEventResult = await deleteEvent(userId, eventSchedule, eventId);
+              
+              results.push({ 
+                  success: true, 
+                  type: 'delete_event', 
+                  data: { 
+                      scheduleName: eventSchedule,
+                      eventId: eventId,
+                      deletedEvent: deleteEventResult
+                  } 
+              });
+              break;
+
+            case 'delete_schedule':
+              console.log('🗑️ Deleting entire schedule...');
+              const deleteScheduleData = action.data;
+              const scheduleToDelete = deleteScheduleData?.name || deleteScheduleData?.scheduleName;
+              
+              if (!scheduleToDelete) {
+                  throw new Error('Schedule name is required for delete_schedule');
+              }
+              
+              const deleteScheduleResult = await deleteUserSchedule(userId, scheduleToDelete);
+              
+              results.push({ 
+                  success: true, 
+                  type: 'delete_schedule', 
+                  data: { 
+                      scheduleName: scheduleToDelete,
+                      deletedSchedule: deleteScheduleResult,
+                      deletedEventsCount: deleteScheduleResult.deletedEventsCount
+                  } 
+              });
+              break;
+
             
             case 'create_memory':
               console.log('🧠 Creating memory category...');
@@ -836,18 +911,92 @@ router.get('/health', async (req, res) => {
 
 /* Users and Authentication */
 router.get('/users', async (req, res) => {
-    try {
-      console.log('👥 Getting all user profiles...');
-      
-      // One simple line - all complexity hidden in the database where it belongs
-      const result = await pool.query('SELECT * FROM get_all_users()');
-      
-      console.log(`✅ Found ${result.rows.length} user profiles`);
-      res.json(result.rows);
-    } catch (error) {
-      console.error('❌ Error getting users:', error);
-      res.status(500).json({ error: 'Failed to get users' });
-    }
+  try {
+    console.log('👥 Getting all user profiles with data counts...');
+    
+    // Instead of relying on the stored procedure, let's build the data ourselves
+    // Step 1: Get all user profiles
+    const profilesResult = await pool.query(`
+      SELECT 
+        u.user_id,
+        COALESCE(up.display_name, u.user_id) as display_name,
+        COALESCE(up.preferred_language, 'en-US') as preferred_language,
+        COALESCE(up.avatar_emoji, '👤') as avatar_emoji,
+        COALESCE(up.theme_preference, 'default') as theme_preference,
+        u.last_active,
+        u.created_at
+      FROM users u
+      LEFT JOIN user_profiles up ON u.user_id = up.user_id
+      ORDER BY u.last_active DESC NULLS LAST
+    `);
+    
+    console.log(`📋 Found ${profilesResult.rows.length} user profiles`);
+    
+    // Step 2: For each user, get their actual data counts
+    const usersWithCounts = await Promise.all(
+      profilesResult.rows.map(async (user) => {
+        try {
+          // Count lists for this user
+          const listsCount = await pool.query(`
+            SELECT COUNT(*) as count 
+            FROM user_lists 
+            WHERE user_id = $1 AND is_archived = false
+          `, [user.user_id]);
+          
+          // Count schedules for this user  
+          const schedulesCount = await pool.query(`
+            SELECT COUNT(*) as count 
+            FROM user_schedules 
+            WHERE user_id = $1
+          `, [user.user_id]);
+          
+          // Count memory categories for this user
+          const memoryCount = await pool.query(`
+            SELECT COUNT(*) as count 
+            FROM memory_categories 
+            WHERE user_id = $1
+          `, [user.user_id]);
+          
+          console.log(`📊 User ${user.display_name}: ${listsCount.rows[0].count} lists, ${schedulesCount.rows[0].count} schedules, ${memoryCount.rows[0].count} memory categories`);
+          
+          return {
+            ...user,
+            // Add the counts in the format the frontend expects
+            lists_count: parseInt(listsCount.rows[0].count) || 0,
+            schedules_count: parseInt(schedulesCount.rows[0].count) || 0,
+            memory_count: parseInt(memoryCount.rows[0].count) || 0,
+            // Also provide in data_summary format for backward compatibility
+            data_summary: {
+              lists_count: parseInt(listsCount.rows[0].count) || 0,
+              schedules_count: parseInt(schedulesCount.rows[0].count) || 0,
+              memory_count: parseInt(memoryCount.rows[0].count) || 0
+            }
+          };
+        } catch (error) {
+          console.error(`❌ Error getting counts for user ${user.user_id}:`, error);
+          // Return user with zero counts if there's an error
+          return {
+            ...user,
+            lists_count: 0,
+            schedules_count: 0,
+            memory_count: 0,
+            data_summary: {
+              lists_count: 0,
+              schedules_count: 0,
+              memory_count: 0
+            }
+          };
+        }
+      })
+    );
+    
+    console.log(`✅ Returning ${usersWithCounts.length} users with complete data counts`);
+    res.json(usersWithCounts);
+    
+  } catch (error) {
+    console.error('❌ Error getting users:', error);
+    res.status(500).json({ error: 'Failed to get users' });
+  }
 });
 
 router.get('/user-profile/:userId', async (req, res) => {
@@ -1239,6 +1388,34 @@ router.post('/lists/update', async (req, res) => {
     });
   }
 });
+
+router.delete('/lists/:userId/:listName', async (req, res) => {
+  try {
+    const { userId, listName } = req.params;
+    
+    console.log(`🗑️ DELETE LIST Request - User: ${userId}, List: "${listName}"`);
+    
+    await ensureUser(userId);
+    const result = await deleteUserList(userId, listName);
+    
+    console.log(`✅ Successfully deleted list: "${listName}"`);
+    res.json({ 
+      success: true, 
+      message: `List "${listName}" deleted successfully`,
+      deletedList: result,
+      deletedItemsCount: result.deletedItemsCount
+    });
+    
+  } catch (error) {
+    console.error('❌ Error deleting list:', error);
+    res.status(500).json({ 
+      error: 'Failed to delete list',
+      details: error.message
+    });
+  }
+});
+
+
 //SCHEDULE 
 
 router.post('/schedules/:userId', async (req, res) => {
@@ -1305,6 +1482,87 @@ router.get('/schedules/:userId', async (req, res) => {
       console.error('❌ Error getting user schedules:', error);
       res.status(500).json({ error: 'Failed to get user schedules' });
     }
+});
+
+router.put('/schedules/:userId/:scheduleName/events/:eventId', async (req, res) => {
+  try {
+    const { userId, scheduleName, eventId } = req.params;
+    const updates = req.body;
+    
+    console.log(`📝 EDIT EVENT Request - User: ${userId}, Schedule: "${scheduleName}", Event: ${eventId}`);
+    console.log(`📝 Updates:`, updates);
+    
+    await ensureUser(userId);
+    const result = await updateEvent(userId, scheduleName, parseInt(eventId), updates);
+    
+    console.log(`✅ Successfully updated event: ${eventId}`);
+    res.json({ 
+      success: true, 
+      message: `Event updated successfully`,
+      updatedEvent: result,
+      appliedUpdates: Object.keys(updates)
+    });
+    
+  } catch (error) {
+    console.error('❌ Error updating event:', error);
+    res.status(500).json({ 
+      error: 'Failed to update event',
+      details: error.message
+    });
+  }
+});
+
+
+router.delete('/schedules/:userId/:scheduleName/events/:eventId', async (req, res) => {
+  try {
+    const { userId, scheduleName, eventId } = req.params;
+    
+    console.log(`🗑️ DELETE EVENT Request - User: ${userId}, Schedule: "${scheduleName}", Event: ${eventId}`);
+    
+    await ensureUser(userId);
+    const result = await deleteEvent(userId, scheduleName, parseInt(eventId));
+    
+    console.log(`✅ Successfully deleted event: ${eventId}`);
+    res.json({ 
+      success: true, 
+      message: `Event deleted successfully`,
+      deletedEvent: result
+    });
+    
+  } catch (error) {
+    console.error('❌ Error deleting event:', error);
+    res.status(500).json({ 
+      error: 'Failed to delete event',
+      details: error.message
+    });
+  }
+});
+
+
+router.delete('/schedules/:userId/:scheduleName', async (req, res) => {
+  try {
+    const { userId, scheduleName } = req.params;
+    
+    console.log(`🗑️ DELETE SCHEDULE Request - User: ${userId}, Schedule: "${scheduleName}"`);
+    
+    await ensureUser(userId);
+    const result = await deleteUserSchedule(userId, scheduleName);
+    
+    console.log(`✅ Successfully deleted schedule: "${scheduleName}"`);
+    res.json({ 
+      success: true, 
+      message: `Schedule "${scheduleName}" deleted successfully`,
+      deletedSchedule: result,
+      deletedEventsCount: result.deletedEventsCount
+    });
+    
+  } catch (error) {
+    console.error('❌ Error deleting schedule:', error);
+    res.status(500).json({ 
+      error: 'Failed to delete schedule',
+      details: error.message
+    });
+  }
 });
 
 

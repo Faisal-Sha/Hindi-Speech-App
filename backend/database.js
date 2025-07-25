@@ -546,6 +546,56 @@ async function deleteListItem(userId, listName, itemId) {
     throw error;
   }
 }
+
+async function deleteUserList(userId, listName) {
+  try {
+    console.log(`🗑️ Deleting entire list "${listName}" for user ${userId}`);
+    
+    // Step 1: Find the list and get its ID
+    const listQuery = await pool.query(
+      'SELECT id, list_name FROM user_lists WHERE user_id = $1 AND list_name = $2',
+      [userId, listName]
+    );
+    
+    if (listQuery.rows.length === 0) {
+      throw new Error(`List "${listName}" not found for user ${userId}`);
+    }
+    
+    const listId = listQuery.rows[0].id;
+    console.log(`📋 Found list "${listName}" with ID: ${listId}`);
+    
+    // Step 2: Delete all items in the list first (foreign key constraint)
+    const deleteItemsResult = await pool.query(
+      'DELETE FROM list_items WHERE list_id = $1',
+      [listId]
+    );
+    
+    console.log(`🗑️ Deleted ${deleteItemsResult.rowCount} items from list`);
+    
+    // Step 3: Delete the list itself
+    const deleteListResult = await pool.query(
+      'DELETE FROM user_lists WHERE id = $1 RETURNING *',
+      [listId]
+    );
+    
+    const deletedList = deleteListResult.rows[0];
+    console.log(`✅ Successfully deleted list:`, {
+      id: deletedList.id,
+      name: deletedList.list_name,
+      deletedItems: deleteItemsResult.rowCount
+    });
+    
+    return {
+      ...deletedList,
+      deletedItemsCount: deleteItemsResult.rowCount
+    };
+    
+  } catch (error) {
+    console.error('❌ Error in deleteUserList:', error);
+    console.error('❌ Stack trace:', error.stack);
+    throw error;
+  }
+}
   
 //SCHEDULE 
 
@@ -772,6 +822,195 @@ async function getUserSchedules(userId) {
     console.error('❌ Error getting user schedules:', error);
     console.error('❌ Error details:', error.message);
     return {};
+  }
+}
+
+async function updateEvent(userId, scheduleName, eventId, updates) {
+  try {
+    console.log(`📝 Updating event ${eventId} in schedule "${scheduleName}" for user ${userId}`);
+    console.log(`📝 Updates:`, updates);
+    
+    // Step 1: Verify the event exists and belongs to the user's schedule
+    const eventCheck = await pool.query(`
+      SELECT se.*, us.schedule_name
+      FROM schedule_events se
+      JOIN user_schedules us ON se.schedule_id = us.id
+      WHERE se.id = $1 AND us.user_id = $2 AND us.schedule_name = $3
+    `, [eventId, userId, scheduleName]);
+    
+    if (eventCheck.rows.length === 0) {
+      throw new Error(`Event ${eventId} not found in schedule "${scheduleName}" for user ${userId}`);
+    }
+    
+    const originalEvent = eventCheck.rows[0];
+    console.log(`📅 Found event to update:`, {
+      id: originalEvent.id,
+      title: originalEvent.event_title,
+      startTime: originalEvent.start_time
+    });
+    
+    // Step 2: Build the update query dynamically based on provided updates
+    const allowedFields = {
+      'title': 'event_title',
+      'description': 'event_description', 
+      'startTime': 'start_time',
+      'endTime': 'end_time',
+      'location': 'location',
+      'type': 'event_type',
+      'isAllDay': 'is_all_day',
+      'reminderMinutes': 'reminder_minutes',
+      'recurrenceRule': 'recurrence_rule'
+    };
+    
+    const updateFields = [];
+    const updateValues = [];
+    let paramCounter = 1;
+    
+    // Process each update field
+    for (const [key, value] of Object.entries(updates)) {
+      if (allowedFields[key]) {
+        updateFields.push(`${allowedFields[key]} = $${paramCounter}`);
+        updateValues.push(value);
+        paramCounter++;
+      } else {
+        console.warn(`⚠️ Ignoring unknown field: ${key}`);
+      }
+    }
+    
+    if (updateFields.length === 0) {
+      throw new Error('No valid fields provided for update');
+    }
+    
+    // Add updated_at timestamp
+    updateFields.push(`updated_at = CURRENT_TIMESTAMP`);
+    
+    // Add the eventId as the last parameter for WHERE clause
+    updateValues.push(eventId);
+    
+    // Step 3: Execute the update
+    const updateQuery = `
+      UPDATE schedule_events 
+      SET ${updateFields.join(', ')}
+      WHERE id = $${paramCounter}
+      RETURNING *
+    `;
+    
+    console.log(`📝 Update query:`, updateQuery);
+    console.log(`📝 Update values:`, updateValues);
+    
+    const updateResult = await pool.query(updateQuery, updateValues);
+    
+    if (updateResult.rows.length === 0) {
+      throw new Error(`Update failed - no rows affected for event ${eventId}`);
+    }
+    
+    const updatedEvent = updateResult.rows[0];
+    console.log(`✅ Successfully updated event:`, {
+      id: updatedEvent.id,
+      title: updatedEvent.event_title,
+      updatedFields: Object.keys(updates)
+    });
+    
+    return updatedEvent;
+    
+  } catch (error) {
+    console.error('❌ Error in updateEvent:', error);
+    console.error('❌ Stack trace:', error.stack);
+    throw error;
+  }
+}
+
+async function deleteEvent(userId, scheduleName, eventId) {
+  try {
+    console.log(`🗑️ Deleting event ${eventId} from schedule "${scheduleName}" for user ${userId}`);
+    
+    // Step 1: Verify the event exists and belongs to the user's schedule
+    const eventCheck = await pool.query(`
+      SELECT se.*, us.schedule_name
+      FROM schedule_events se
+      JOIN user_schedules us ON se.schedule_id = us.id
+      WHERE se.id = $1 AND us.user_id = $2 AND us.schedule_name = $3
+    `, [eventId, userId, scheduleName]);
+    
+    if (eventCheck.rows.length === 0) {
+      throw new Error(`Event ${eventId} not found in schedule "${scheduleName}" for user ${userId}`);
+    }
+    
+    const eventToDelete = eventCheck.rows[0];
+    console.log(`📅 Found event to delete:`, {
+      id: eventToDelete.id,
+      title: eventToDelete.event_title,
+      startTime: eventToDelete.start_time
+    });
+    
+    // Step 2: Delete the event
+    const deleteResult = await pool.query(
+      'DELETE FROM schedule_events WHERE id = $1 RETURNING *',
+      [eventId]
+    );
+    
+    const deletedEvent = deleteResult.rows[0];
+    console.log(`✅ Successfully deleted event:`, {
+      id: deletedEvent.id,
+      title: deletedEvent.event_title
+    });
+    
+    return deletedEvent;
+    
+  } catch (error) {
+    console.error('❌ Error in deleteEvent:', error);
+    console.error('❌ Stack trace:', error.stack);
+    throw error;
+  }
+}
+
+async function deleteUserSchedule(userId, scheduleName) {
+  try {
+    console.log(`🗑️ Deleting entire schedule "${scheduleName}" for user ${userId}`);
+    
+    // Step 1: Find the schedule and get its ID
+    const scheduleQuery = await pool.query(
+      'SELECT id, schedule_name FROM user_schedules WHERE user_id = $1 AND schedule_name = $2',
+      [userId, scheduleName]
+    );
+    
+    if (scheduleQuery.rows.length === 0) {
+      throw new Error(`Schedule "${scheduleName}" not found for user ${userId}`);
+    }
+    
+    const scheduleId = scheduleQuery.rows[0].id;
+    console.log(`📅 Found schedule "${scheduleName}" with ID: ${scheduleId}`);
+    
+    // Step 2: Delete all events in the schedule first (foreign key constraint)
+    const deleteEventsResult = await pool.query(
+      'DELETE FROM schedule_events WHERE schedule_id = $1',
+      [scheduleId]
+    );
+    
+    console.log(`🗑️ Deleted ${deleteEventsResult.rowCount} events from schedule`);
+    
+    // Step 3: Delete the schedule itself
+    const deleteScheduleResult = await pool.query(
+      'DELETE FROM user_schedules WHERE id = $1 RETURNING *',
+      [scheduleId]
+    );
+    
+    const deletedSchedule = deleteScheduleResult.rows[0];
+    console.log(`✅ Successfully deleted schedule:`, {
+      id: deletedSchedule.id,
+      name: deletedSchedule.schedule_name,
+      deletedEvents: deleteEventsResult.rowCount
+    });
+    
+    return {
+      ...deletedSchedule,
+      deletedEventsCount: deleteEventsResult.rowCount
+    };
+    
+  } catch (error) {
+    console.error('❌ Error in deleteUserSchedule:', error);
+    console.error('❌ Stack trace:', error.stack);
+    throw error;
   }
 }
 
@@ -1151,9 +1390,13 @@ module.exports = {
     updateListItemStatus, 
     updateListItemText,
     deleteListItem,
+    deleteUserList, 
     createUserSchedule,
     addEventToSchedule,
     getUserSchedules,
+    updateEvent, 
+    deleteEvent, 
+    deleteUserSchedule,
     createMemoryCategory, 
     addMemoryItem,
     getUserMemories,
