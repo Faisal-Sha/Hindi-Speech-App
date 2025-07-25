@@ -150,7 +150,6 @@ const UserSelector = ({ onUserSelect, currentUser }) => {
         {/* Header */}
         <div className="user-selector-header">
           <h1 className="main-title">🤖 Personal AI Assistant</h1>
-          <h2 className="subtitle">व्यक्तिगत एआई सहायक</h2>
           <p className="tagline">Who's using the assistant today?</p>
         </div>
 
@@ -190,9 +189,15 @@ const UserSelector = ({ onUserSelect, currentUser }) => {
 
                 {/* User Stats */}
                 <div className="user-stats">
-                  <div className="stat-item">📝 {user.data_summary?.lists_count || 0} Lists</div>
-                  <div className="stat-item">📅 {user.data_summary?.schedules_count || 0} Schedules</div>
-                  <div className="stat-item">🧠 {user.data_summary?.memory_count || 0} Memory Items</div>
+                  <div className="stat-item">
+                    📝 {user.lists_count || user.data_summary?.lists_count || 0} Lists
+                  </div>
+                  <div className="stat-item">
+                    📅 {user.schedules_count || user.data_summary?.schedules_count || 0} Schedules
+                  </div>
+                  <div className="stat-item">
+                    🧠 {user.memory_count || user.data_summary?.memory_count || 0} Memory Items
+                  </div>
                 </div>
 
                 {/* Last Active */}

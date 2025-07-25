@@ -7,7 +7,11 @@ const ContentDisplay = ({
   userSchedules, 
   userMemory,
   isDataLoading, 
-  onUpdateListItem
+  onUpdateListItem, 
+  onDeleteList,
+  onEditEvent, 
+  onDeleteEvent, 
+  onDeleteSchedule   
 }) => {
 
   const [editingItem, setEditingItem] = useState(null);
@@ -187,7 +191,7 @@ const ContentDisplay = ({
             {messages.map((msg, index) => (
               <div key={index} className={`message ${msg.type}`}>
                 <div className="message-sender">
-                  {msg.type === "user" ? "👤 आप (You)" : "🤖 AI सहायक (Assistant)"}
+                  {msg.type === "user" ? "👤 (You)" : "🤖 AI (Assistant)"}
                 </div>
                 <div className="message-text">{msg.text}</div>
                 <div className="message-time">
