@@ -122,6 +122,104 @@ function App() {
     }
   };
 
+
+  const handleDeleteList = async (action) => {
+    if (!currentUser) {
+      console.error('❌ No user selected');
+      return;
+    }
+  
+    try {
+      console.log('🗑️ Handling list deletion:', action);
+      
+      // Process the action through AI actions handler
+      await handleAiActions([action], currentUser.user_id);
+      
+      // Also call the backend API directly for immediate effect
+      await saveDataChanges([action]);
+      
+      console.log('✅ List deleted successfully');
+      
+    } catch (error) {
+      console.error('❌ Error deleting list:', error);
+      // You might want to show a user-friendly error message here
+    }
+  };
+  
+  /**
+   * Handle deleting entire schedules
+   */
+  const handleDeleteSchedule = async (action) => {
+    if (!currentUser) {
+      console.error('❌ No user selected');
+      return;
+    }
+  
+    try {
+      console.log('🗑️ Handling schedule deletion:', action);
+      
+      // Process the action through AI actions handler
+      await handleAiActions([action], currentUser.user_id);
+      
+      // Also call the backend API directly for immediate effect
+      await saveDataChanges([action]);
+      
+      console.log('✅ Schedule deleted successfully');
+      
+    } catch (error) {
+      console.error('❌ Error deleting schedule:', error);
+    }
+  };
+  
+  /**
+   * Handle deleting individual events
+   */
+  const handleDeleteEvent = async (action) => {
+    if (!currentUser) {
+      console.error('❌ No user selected');
+      return;
+    }
+  
+    try {
+      console.log('🗑️ Handling event deletion:', action);
+      
+      // Process the action through AI actions handler
+      await handleAiActions([action], currentUser.user_id);
+      
+      // Also call the backend API directly for immediate effect
+      await saveDataChanges([action]);
+      
+      console.log('✅ Event deleted successfully');
+      
+    } catch (error) {
+      console.error('❌ Error deleting event:', error);
+    }
+  };
+  
+  /**
+   * Handle editing individual events
+   */
+  const handleEditEvent = async (action) => {
+    if (!currentUser) {
+      console.error('❌ No user selected');
+      return;
+    }
+  
+    try {
+      console.log('📝 Handling event edit:', action);
+      
+      // Process the action through AI actions handler
+      await handleAiActions([action], currentUser.user_id);
+      
+      // Also call the backend API directly for immediate effect
+      await saveDataChanges([action]);
+      
+      console.log('✅ Event edited successfully');
+      
+    } catch (error) {
+      console.error('❌ Error editing event:', error);
+    }
+  };
   /**
  * Update local state for list items
  * This mimics the update_list logic from useDataManagement
@@ -383,6 +481,10 @@ function App() {
         userMemory={userMemory}
         isDataLoading={isDataLoading}
         onUpdateListItem={handleUpdateListItem}
+        onDeleteList={handleDeleteList}           
+        onDeleteSchedule={handleDeleteSchedule}   
+        onDeleteEvent={handleDeleteEvent}         
+        onEditEvent={handleEditEvent}
       />
 
 
