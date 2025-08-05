@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useRef } from 'react';
+import CollapsibleSection from './CollapsibleSection';
 
 const ContentDisplay = ({ 
   currentMode, 
@@ -14,7 +15,7 @@ const ContentDisplay = ({
   onDeleteSchedule   
 }) => {
 
-  
+  // ===== STATE MANAGEMENT =====
   const [editingItem, setEditingItem] = useState(null);
   const [editText, setEditText] = useState('');
   const [editingEvent, setEditingEvent] = useState(null);
@@ -22,6 +23,7 @@ const ContentDisplay = ({
 
   const isEditingRef = useRef(false);
 
+  // ===== UTILITY FUNCTIONS =====
   const formatDate = (dateInput) => {
     if (!dateInput) return 'recently';
     
@@ -59,7 +61,6 @@ const ContentDisplay = ({
     }
   };
 
-  // Enhanced format for event times with proper date/time display
   const formatEventTime = (startTime, endTime) => {
     if (!startTime) return 'No time set';
     
@@ -84,7 +85,6 @@ const ContentDisplay = ({
     }
   };
 
-  // Convert datetime to HTML datetime-local format
   const formatDateTimeForInput = (dateTime) => {
     if (!dateTime) return '';
     try {
@@ -106,6 +106,7 @@ const ContentDisplay = ({
   };
 
 
+  // ===== LIST ITEM HANDLERS =====
   const handleItemUpdate = async (listName, item, operation, newText = null) => {
     if (!onUpdateListItem) {
       console.warn('onUpdateListItem prop not provided');
@@ -136,15 +137,12 @@ const ContentDisplay = ({
     }
   };
 
-
-  
-  // Toggle completion status
   const toggleItemCompletion = (listName, item) => {
     const operation = item.completed ? 'uncomplete' : 'complete';
     handleItemUpdate(listName, item, operation);
   };
 
-  // List
+  
   const deleteItem = (listName, item) => {
     if (window.confirm(`Are you sure you want to delete "${item.text || item.name}"?`)) {
       handleItemUpdate(listName, item, 'delete');
@@ -315,59 +313,7 @@ const ContentDisplay = ({
       isEditingRef.current = false;
     }, []);
 
-  // Simple collapsible section component - no need for separate file
-  const CollapsibleSection = ({ 
-    title, 
-    count, 
-    subtitle, 
-    children, 
-    defaultExpanded = false,
-    showDeleteButton = false,
-    onDelete = null,
-    deleteConfirmText = "Are you sure you want to delete this?"
-  }) => {
-    const [isExpanded, setIsExpanded] = useState(defaultExpanded);
-
-    return (
-      <div className="collapsible-section">
-        <div 
-          className={`collapsible-header ${isExpanded ? 'expanded' : 'collapsed'}`}
-        >
-          <div 
-            onClick={() => setIsExpanded(!isExpanded)}
-            className="collapsible-header-content"
-          >
-            <h4>{title}</h4>
-            <div className="collapsible-header-meta">
-              <span className="count-badge">{count} {count === 1 ? 'item' : 'items'}</span>
-              <span className="date-text"> {subtitle}</span>
-              <span className="expand-icon">{isExpanded ? '▼' : '▶'}</span>
-            </div>
-          </div>
-          
-          {/* NEW: Delete button for entire list/schedule */}
-          {showDeleteButton && onDelete && (
-            <button 
-              className="delete-section-btn"
-              onClick={(e) => {
-                e.stopPropagation(); // Prevent collapsing when clicking delete
-                onDelete();
-              }}
-              title="Delete entire list/schedule"
-            >
-              🗑️
-            </button>
-          )}
-        </div>
-        
-        {isExpanded && (
-          <div className="collapsible-content">
-            {children}
-          </div>
-        )}
-      </div>
-    );
-  };
+  
 
   // Empty state component - no need for separate file
   const EmptyState = ({ mode }) => {

@@ -1210,13 +1210,27 @@ div, span, button, input, h1, h2, h3, p {
   transform: scale(1.05);
 }
 
-/* Edit Event Form */
+/* Enhanced Edit Event Form */
 .edit-event-form {
   width: 100%;
   background: #f8f9fa;
-  padding: var(--spacing-md);
+  padding: var(--spacing-lg);
   border-radius: var(--radius-md);
   border: 2px solid var(--pink-light);
+  box-shadow: 0 4px 12px rgba(138, 122, 107, 0.15);
+}
+
+.edit-event-form label {
+  display: block;
+  margin-bottom: var(--spacing-xs);
+  margin-top: var(--spacing-sm);
+  font-weight: 600;
+  color: var(--text-dark);
+  font-size: 0.9rem;
+}
+
+.edit-event-form label:first-child {
+  margin-top: 0;
 }
 
 .edit-event-title,
@@ -1229,7 +1243,9 @@ div, span, button, input, h1, h2, h3, p {
   border-radius: var(--radius-sm);
   margin-bottom: var(--spacing-sm);
   font-size: 0.95rem;
-  transition: border-color var(--transition-fast);
+  font-family: inherit;
+  transition: all var(--transition-fast);
+  background: white;
 }
 
 .edit-event-title:focus,
@@ -1238,53 +1254,175 @@ div, span, button, input, h1, h2, h3, p {
 .edit-event-description:focus {
   outline: none;
   border-color: var(--pink);
-  box-shadow: 0 0 0 2px rgba(138, 122, 107, 0.2);
+  box-shadow: 0 0 0 3px rgba(138, 122, 107, 0.2);
+  background: white;
+}
+
+.edit-event-title {
+  font-weight: 600;
+  font-size: 1rem;
 }
 
 .edit-event-description {
   min-height: 4rem;
   resize: vertical;
   font-family: inherit;
+  line-height: 1.5;
 }
 
 .edit-event-actions {
   display: flex;
   gap: var(--spacing-sm);
   justify-content: flex-end;
-  margin-top: var(--spacing-sm);
+  margin-top: var(--spacing-md);
+  padding-top: var(--spacing-sm);
+  border-top: 1px solid var(--border);
 }
 
 .edit-event-actions .save-btn {
   background: #27ae60;
   color: white;
   border: none;
-  padding: var(--spacing-sm) var(--spacing-md);
+  padding: var(--spacing-sm) var(--spacing-lg);
   border-radius: var(--radius-sm);
   cursor: pointer;
-  font-weight: 500;
+  font-weight: 600;
+  font-size: 0.95rem;
   transition: all var(--transition-fast);
+  min-width: 100px;
 }
 
 .edit-event-actions .save-btn:hover {
   background: #219a52;
-  transform: translateY(-1px);
-  box-shadow: 0 2px 8px rgba(39, 174, 96, 0.3);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(39, 174, 96, 0.3);
+}
+
+.edit-event-actions .save-btn:active {
+  transform: translateY(0);
 }
 
 .edit-event-actions .cancel-btn {
   background: #95a5a6;
   color: white;
   border: none;
-  padding: var(--spacing-sm) var(--spacing-md);
+  padding: var(--spacing-sm) var(--spacing-lg);
   border-radius: var(--radius-sm);
   cursor: pointer;
-  font-weight: 500;
+  font-weight: 600;
+  font-size: 0.95rem;
   transition: all var(--transition-fast);
+  min-width: 100px;
 }
 
 .edit-event-actions .cancel-btn:hover {
   background: #7f8c8d;
-  transform: translateY(-1px);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(149, 165, 166, 0.3);
+}
+
+.edit-event-actions .cancel-btn:active {
+  transform: translateY(0);
+}
+
+/* Improved Schedule Item Layout */
+.schedule-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: var(--spacing-md);
+  background: linear-gradient(135deg, var(--card-bg) 0%, white 100%);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--spacing-sm);
+  transition: all var(--transition-normal);
+}
+
+.schedule-item:hover:not(:has(.edit-event-form)) {
+  background: linear-gradient(135deg, var(--pink-light) 0%, var(--card-bg) 100%);
+  border-color: var(--pink);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(138, 122, 107, 0.15);
+}
+
+/* When editing, make the item full width */
+.schedule-item:has(.edit-event-form) {
+  flex-direction: column;
+  align-items: stretch;
+  background: white;
+  border: 2px solid var(--pink);
+}
+
+/* Enhanced datetime input styling */
+.edit-event-time {
+  font-family: monospace;
+  font-size: 0.9rem;
+}
+
+/* Better mobile responsiveness for edit form */
+@media (max-width: 768px) {
+  .edit-event-form {
+    padding: var(--spacing-md);
+  }
+  
+  .edit-event-actions {
+    flex-direction: column;
+    gap: var(--spacing-xs);
+  }
+  
+  .edit-event-actions .save-btn,
+  .edit-event-actions .cancel-btn {
+    width: 100%;
+    min-width: auto;
+  }
+  
+  .schedule-item {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .schedule-item-actions {
+    margin-left: 0;
+    margin-top: var(--spacing-sm);
+    justify-content: flex-end;
+  }
+}
+
+/* Loading state for save button */
+.edit-event-actions .save-btn:disabled {
+  background: #bdc3c7;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.edit-event-actions .save-btn:disabled:hover {
+  background: #bdc3c7;
+  transform: none;
+  box-shadow: none;
+}
+
+/* Success feedback */
+.edit-success {
+  background: #d4edda;
+  color: #155724;
+  padding: var(--spacing-sm);
+  border-radius: var(--radius-sm);
+  margin-bottom: var(--spacing-sm);
+  border: 1px solid #c3e6cb;
+  text-align: center;
+  font-weight: 500;
+}
+
+/* Error feedback */
+.edit-error {
+  background: #f8d7da;
+  color: #721c24;
+  padding: var(--spacing-sm);
+  border-radius: var(--radius-sm);
+  margin-bottom: var(--spacing-sm);
+  border: 1px solid #f5c6cb;
+  text-align: center;
+  font-weight: 500;
 }
 
 /* Enhanced List Item Actions */
