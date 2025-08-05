@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 
 const ContentDisplay = ({ 
   currentMode, 
@@ -14,31 +14,98 @@ const ContentDisplay = ({
   onDeleteSchedule   
 }) => {
 
+  
   const [editingItem, setEditingItem] = useState(null);
   const [editText, setEditText] = useState('');
+  const [editingEvent, setEditingEvent] = useState(null);
+  const [editEventData, setEditEventData] = useState({});
 
-  // Helper function to safely format dates
+  const isEditingRef = useRef(false);
+
   const formatDate = (dateInput) => {
     if (!dateInput) return 'recently';
     
     try {
+      let date;
+      
       if (dateInput instanceof Date) {
-        return dateInput.toLocaleDateString();
+        date = dateInput;
+      } else if (typeof dateInput === 'string') {
+        date = new Date(dateInput);
+      } else {
+        return 'recently';
       }
       
-      if (typeof dateInput === 'string') {
-        const date = new Date(dateInput);
-        if (!isNaN(date.getTime())) {
-          return date.toLocaleDateString();
-        }
+      if (isNaN(date.getTime())) {
+        return 'recently';
       }
       
-      return 'recently';
+      const now = new Date();
+      const diffTime = Math.abs(now - date);
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      
+      if (diffDays === 0) {
+        return `Today ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+      } else if (diffDays === 1) {
+        return `Yesterday ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+      } else if (diffDays <= 7) {
+        return `${diffDays} days ago`;
+      } else {
+        return date.toLocaleDateString();
+      }
     } catch (error) {
       console.warn('Error formatting date:', dateInput, error);
       return 'recently';
     }
   };
+
+  // Enhanced format for event times with proper date/time display
+  const formatEventTime = (startTime, endTime) => {
+    if (!startTime) return 'No time set';
+    
+    try {
+      const start = new Date(startTime);
+      const end = endTime ? new Date(endTime) : null;
+      
+      if (isNaN(start.getTime())) return 'Invalid time';
+      
+      const dateStr = start.toLocaleDateString();
+      const timeStr = start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      
+      if (end && !isNaN(end.getTime())) {
+        const endTimeStr = end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        return `${dateStr} ${timeStr} - ${endTimeStr}`;
+      }
+      
+      return `${dateStr} ${timeStr}`;
+    } catch (error) {
+      console.warn('Error formatting event time:', startTime, error);
+      return 'Invalid time';
+    }
+  };
+
+  // Convert datetime to HTML datetime-local format
+  const formatDateTimeForInput = (dateTime) => {
+    if (!dateTime) return '';
+    try {
+      const date = new Date(dateTime);
+      if (isNaN(date.getTime())) return '';
+      
+      // Format for datetime-local input: YYYY-MM-DDTHH:mm
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      const hours = String(date.getHours()).padStart(2, '0');
+      const minutes = String(date.getMinutes()).padStart(2, '0');
+      
+      return `${year}-${month}-${day}T${hours}:${minutes}`;
+    } catch (error) {
+      console.warn('Error formatting datetime for input:', dateTime, error);
+      return '';
+    }
+  };
+
+
   const handleItemUpdate = async (listName, item, operation, newText = null) => {
     if (!onUpdateListItem) {
       console.warn('onUpdateListItem prop not provided');
@@ -77,7 +144,7 @@ const ContentDisplay = ({
     handleItemUpdate(listName, item, operation);
   };
 
-  // Delete an item
+  // List
   const deleteItem = (listName, item) => {
     if (window.confirm(`Are you sure you want to delete "${item.text || item.name}"?`)) {
       handleItemUpdate(listName, item, 'delete');
@@ -89,7 +156,7 @@ const ContentDisplay = ({
     setEditText(item.text || item.name || '');
   };
 
-  // Save edited item
+  
   const saveEdit = async (listName, item) => {
     if (editText.trim() !== item.text) {
       await handleItemUpdate(listName, item, 'edit', editText.trim());
@@ -104,26 +171,193 @@ const ContentDisplay = ({
     setEditText('');
   };
 
+  const deleteList = (listName) => {
+    if (window.confirm(`Are you sure you want to delete the entire list "${listName}"? This will remove all items in the list.`)) {
+      if (onDeleteList) {
+        console.log(`🗑️ Deleting list: ${listName}`);
+        onDeleteList({
+          type: 'delete_list',
+          data: { name: listName }
+        });
+      } else {
+        console.warn('onDeleteList handler not provided');
+      }
+    }
+  };
+
+
+  //Schedule
+  const deleteSchedule = (scheduleName) => {
+    if (window.confirm(`Are you sure you want to delete the entire schedule "${scheduleName}"? This will remove all events in the schedule.`)) {
+      if (onDeleteSchedule) {
+        console.log(`🗑️ Deleting schedule: ${scheduleName}`);
+        onDeleteSchedule({
+          type: 'delete_schedule',
+          data: { name: scheduleName }
+        });
+      } else {
+        console.warn('onDeleteSchedule handler not provided');
+      }
+    }
+  };
+
+    // NEW: Delete individual event
+    const deleteEvent = (scheduleName, event) => {
+      const eventTitle = event.title || event.event_title || 'this event';
+      if (window.confirm(`Are you sure you want to delete "${eventTitle}"?`)) {
+        if (onDeleteEvent) {
+          console.log(`🗑️ Deleting event: ${event.id} from ${scheduleName}`);
+          onDeleteEvent({
+            type: 'delete_event',
+            data: { 
+              scheduleName: scheduleName,
+              eventId: event.id 
+            }
+          });
+        } else {
+          console.warn('onDeleteEvent handler not provided');
+        }
+      }
+    };
+  
+    // NEW: Start editing an event
+    const startEditingEvent = useCallback((scheduleName, event) => {
+      console.log('📝 Starting to edit event:', event);
+      
+      // Set the editing state
+      isEditingRef.current = true;
+      setEditingEvent({ scheduleName, eventId: event.id });
+      
+      // Prepare the edit data with all current event properties
+      const editData = {
+        title: event.title || event.event_title || '',
+        description: event.description || event.event_description || '',
+        startTime: formatDateTimeForInput(event.startTime || event.start_time),
+        endTime: formatDateTimeForInput(event.endTime || event.end_time),
+        location: event.location || ''
+      };
+      
+      console.log('📝 Edit data prepared:', editData);
+      setEditEventData(editData);
+    }, []);
+  
+    //
+    const saveEditedEvent = useCallback(async () => {
+      if (!onEditEvent || !editingEvent) {
+        console.warn('onEditEvent handler not provided or no event being edited');
+        return;
+      }
+  
+      try {
+        console.log(`📝 Saving edited event: ${editingEvent.eventId}`);
+        console.log(`📝 Event updates:`, editEventData);
+        
+        // Prepare updates - only include fields that have values
+        const updates = {};
+        
+        if (editEventData.title.trim()) {
+          updates.title = editEventData.title.trim();
+        }
+        
+        if (editEventData.description.trim()) {
+          updates.description = editEventData.description.trim();
+        }
+        
+        if (editEventData.startTime) {
+          updates.startTime = new Date(editEventData.startTime).toISOString();
+        }
+        
+        if (editEventData.endTime) {
+          updates.endTime = new Date(editEventData.endTime).toISOString();
+        }
+        
+        if (editEventData.location.trim()) {
+          updates.location = editEventData.location.trim();
+        }
+        
+        console.log(`📝 Prepared updates:`, updates);
+        
+        // Call the edit handler
+        await onEditEvent({
+          type: 'edit_event',
+          data: {
+            scheduleName: editingEvent.scheduleName,
+            eventId: editingEvent.eventId,
+            updates: updates
+          }
+        });
+        
+        // Reset editing state
+        setEditingEvent(null);
+        setEditEventData({});
+        isEditingRef.current = false;
+        
+        console.log('✅ Event saved successfully');
+        
+      } catch (error) {
+        console.error('❌ Error saving event:', error);
+        // Don't reset the editing state if there's an error, so user can try again
+      }
+    }, [onEditEvent, editingEvent, editEventData]);
+
+    const updateEventField = useCallback((field, value) => {
+      console.log(`📝 Updating field ${field} to:`, value);
+      setEditEventData(prev => ({
+        ...prev,
+        [field]: value
+      }));
+    }, []);
+  
+    const cancelEditingEvent = useCallback(() => {
+      console.log('❌ Cancelling event edit');
+      setEditingEvent(null);
+      setEditEventData({});
+      isEditingRef.current = false;
+    }, []);
+
   // Simple collapsible section component - no need for separate file
-  const CollapsibleSection = ({ title, count, subtitle, children, defaultExpanded = false }) => {
+  const CollapsibleSection = ({ 
+    title, 
+    count, 
+    subtitle, 
+    children, 
+    defaultExpanded = false,
+    showDeleteButton = false,
+    onDelete = null,
+    deleteConfirmText = "Are you sure you want to delete this?"
+  }) => {
     const [isExpanded, setIsExpanded] = useState(defaultExpanded);
 
     return (
       <div className="collapsible-section">
         <div 
-          onClick={() => setIsExpanded(!isExpanded)}
           className={`collapsible-header ${isExpanded ? 'expanded' : 'collapsed'}`}
         >
-          <div className="collapsible-header-content">
+          <div 
+            onClick={() => setIsExpanded(!isExpanded)}
+            className="collapsible-header-content"
+          >
             <h4>{title}</h4>
             <div className="collapsible-header-meta">
-              {count !== undefined && `${count} items`}
-              {subtitle && ` • ${subtitle}`}
+              <span className="count-badge">{count} {count === 1 ? 'item' : 'items'}</span>
+              <span className="date-text"> {subtitle}</span>
+              <span className="expand-icon">{isExpanded ? '▼' : '▶'}</span>
             </div>
           </div>
-          <div className={`collapsible-arrow ${isExpanded ? 'expanded' : ''}`}>
-            ▼
-          </div>
+          
+          {/* NEW: Delete button for entire list/schedule */}
+          {showDeleteButton && onDelete && (
+            <button 
+              className="delete-section-btn"
+              onClick={(e) => {
+                e.stopPropagation(); // Prevent collapsing when clicking delete
+                onDelete();
+              }}
+              title="Delete entire list/schedule"
+            >
+              🗑️
+            </button>
+          )}
         </div>
         
         {isExpanded && (
@@ -216,53 +450,39 @@ const ContentDisplay = ({
     return (
       <div className="lists-content">
         {!hasLists ? (
-          <EmptyState mode="lists" />
+          <div className="empty-state">
+            <h3>📝 No lists yet</h3>
+            <p>Create your first list by saying "Create a shopping list"</p>
+          </div>
         ) : (
           <>
             <h3 className="content-title">📝 Your Lists</h3>
             {Object.entries(userLists).map(([listId, list]) => (
               <CollapsibleSection
                 key={listId}
-                title={`📝 ${list.name || list.title || listId}`}
+                title={`📝 ${list.name || listId}`}
                 count={list.items?.length || 0}
                 subtitle={`Created ${formatDate(list.created)}`}
                 defaultExpanded={true}
+                showDeleteButton={true}
+                onDelete={() => deleteList(list.name || listId)}
               >
                 {!list.items || list.items.length === 0 ? (
                   <div className="empty-list-message">
-                    This list is empty. Add items by saying "Add [item] to {list.name}"
+                    No items yet. Add items by saying "Add milk to {list.name || listId}"
                   </div>
                 ) : (
                   <div className="list-items">
                     {list.items.map((item, index) => {
-                      // Ensure item has an ID for operations
-                      const itemWithId = {
-                        id: item.id || `${listId}-${index}`,
-                        text: typeof item === 'string' ? item : item.text || item.name || JSON.stringify(item),
-                        completed: item.completed || false,
-                        ...item
-                      };
-
-                      const isEditing = editingItem && 
-                                      editingItem.listName === listId && 
-                                      editingItem.itemId === itemWithId.id;
-
+                      const isEditing = editingItem?.listName === (list.name || listId) && editingItem?.itemId === item.id;
+                      
                       return (
-                        <div 
-                          key={itemWithId.id} 
-                          className={`list-item ${itemWithId.completed ? 'completed' : 'pending'} interactive`}
-                        >
-                          {/* Main clickable area to toggle completion */}
-                          <div 
-                            className="list-item-main"
-                            onClick={() => !isEditing && toggleItemCompletion(listId, itemWithId)}
-                            title={itemWithId.completed ? 'Click to mark as incomplete' : 'Click to mark as complete'}
-                          >
+                        <div key={item.id || index} className={`list-item interactive ${item.completed ? 'completed' : ''}`}>
+                          <div className="list-item-main" onClick={() => toggleItemCompletion(list.name || listId, item)}>
                             <span className="list-item-icon">
-                              {itemWithId.completed ? '✅' : '⭕'}
+                              {item.completed ? '✅' : '⭕'}
                             </span>
                             
-                            {/* Editable text area */}
                             {isEditing ? (
                               <input
                                 type="text"
@@ -270,68 +490,32 @@ const ContentDisplay = ({
                                 onChange={(e) => setEditText(e.target.value)}
                                 onKeyPress={(e) => {
                                   if (e.key === 'Enter') {
-                                    saveEdit(listId, itemWithId);
+                                    saveEdit(list.name || listId, item);
                                   } else if (e.key === 'Escape') {
                                     cancelEdit();
                                   }
                                 }}
-                                onBlur={() => saveEdit(listId, itemWithId)}
-                                className="edit-input"
+                                onBlur={() => saveEdit(list.name || listId, item)}
                                 autoFocus
+                                className="edit-input"
                               />
                             ) : (
-                              <span className={`list-item-text ${itemWithId.completed ? 'completed' : ''}`}>
-                                {itemWithId.text}
+                              <span className="list-item-text">
+                                {typeof item === 'string' ? item : item.text || item.name || 'Untitled Item'}
                               </span>
                             )}
                           </div>
                           
-                          {/* Action buttons */}
                           <div className="list-item-actions">
-                            {!isEditing && (
+                            {isEditing ? (
                               <>
-                                <button
-                                  className="edit-item-btn"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    startEditing(listId, itemWithId);
-                                  }}
-                                  title="Edit this item"
-                                >
-                                  ✏️
-                                </button>
-                                
-                                {itemWithId.completed && (
-                                  <button
-                                    className="delete-item-btn"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      deleteItem(listId, itemWithId);
-                                    }}
-                                    title="Delete this item"
-                                  >
-                                    🗑️
-                                  </button>
-                                )}
+                                <button onClick={() => saveEdit(list.name || listId, item)} className="save-btn">✅</button>
+                                <button onClick={cancelEdit} className="cancel-btn">❌</button>
                               </>
-                            )}
-                            
-                            {isEditing && (
+                            ) : (
                               <>
-                                <button
-                                  className="save-item-btn"
-                                  onClick={() => saveEdit(listId, itemWithId)}
-                                  title="Save changes"
-                                >
-                                  ✅
-                                </button>
-                                <button
-                                  className="cancel-item-btn"
-                                  onClick={cancelEdit}
-                                  title="Cancel editing"
-                                >
-                                  ❌
-                                </button>
+                                <button onClick={() => startEditing(list.name || listId, item)} className="edit-btn">✏️</button>
+                                <button onClick={() => deleteItem(list.name || listId, item)} className="delete-btn">🗑️</button>
                               </>
                             )}
                           </div>
@@ -350,16 +534,19 @@ const ContentDisplay = ({
 
 
   // Schedule display
-  const renderScheduleContent = () => {
+  const renderSchedulesContent = () => {
     const hasSchedules = userSchedules && Object.keys(userSchedules).length > 0;
     
     return (
-      <div className="schedule-content">
+      <div className="schedules-content">
         {!hasSchedules ? (
-          <EmptyState mode="schedule" />
+          <div className="empty-state">
+            <h3>📅 No schedules yet</h3>
+            <p>Create your first schedule by saying "I have a meeting tomorrow at 3 PM"</p>
+          </div>
         ) : (
           <>
-            <h3 className="content-title">📅 Your Schedule</h3>
+            <h3 className="content-title">📅 Your Schedules</h3>
             {Object.entries(userSchedules).map(([scheduleId, schedule]) => (
               <CollapsibleSection
                 key={scheduleId}
@@ -367,6 +554,8 @@ const ContentDisplay = ({
                 count={schedule.events?.length || 0}
                 subtitle={`Created ${formatDate(schedule.created)}`}
                 defaultExpanded={true}
+                showDeleteButton={true}
+                onDelete={() => deleteSchedule(schedule.name || scheduleId)}
               >
                 {!schedule.events || schedule.events.length === 0 ? (
                   <div className="empty-schedule-message">
@@ -374,23 +563,105 @@ const ContentDisplay = ({
                   </div>
                 ) : (
                   <div className="schedule-items">
-                    {schedule.events.map((event, index) => (
-                      <div key={index} className="schedule-item">
-                        <div className="schedule-item-title">
-                          {typeof event === 'string' ? event : event.title || event.name || 'Untitled Event'}
+                    {schedule.events.map((event, index) => {
+                      const isEditingThisEvent = editingEvent?.scheduleName === (schedule.name || scheduleId) && editingEvent?.eventId === event.id;
+                      
+                      return (
+                        <div key={event.id || index} className="schedule-item">
+                          {isEditingThisEvent ? (
+                            // FIXED: Edit mode with proper event handlers
+                            <div className="edit-event-form">
+                              <input
+                                type="text"
+                                placeholder="Event title"
+                                value={editEventData.title || ''}
+                                onChange={(e) => updateEventField('title', e.target.value)}
+                                className="edit-event-title"
+                              />
+                              
+                              <label>Start Time:</label>
+                              <input
+                                type="datetime-local"
+                                value={editEventData.startTime || ''}
+                                onChange={(e) => updateEventField('startTime', e.target.value)}
+                                className="edit-event-time"
+                              />
+                              
+                              <label>End Time (optional):</label>
+                              <input
+                                type="datetime-local"
+                                value={editEventData.endTime || ''}
+                                onChange={(e) => updateEventField('endTime', e.target.value)}
+                                className="edit-event-time"
+                              />
+                              
+                              <input
+                                type="text"
+                                placeholder="Location (optional)"
+                                value={editEventData.location || ''}
+                                onChange={(e) => updateEventField('location', e.target.value)}
+                                className="edit-event-location"
+                              />
+                              
+                              <textarea
+                                placeholder="Description (optional)"
+                                value={editEventData.description || ''}
+                                onChange={(e) => updateEventField('description', e.target.value)}
+                                className="edit-event-description"
+                                rows="3"
+                              />
+                              
+                              <div className="edit-event-actions">
+                                <button onClick={saveEditedEvent} className="save-btn">✅ Save</button>
+                                <button onClick={cancelEditingEvent} className="cancel-btn">❌ Cancel</button>
+                              </div>
+                            </div>
+                          ) : (
+                            // Display mode for events
+                            <>
+                              <div className="schedule-item-main">
+                                <div className="schedule-item-title">
+                                  {event.title || event.event_title || 'Untitled Event'}
+                                </div>
+                                
+                                <div className="schedule-item-time">
+                                  📅 {formatEventTime(event.startTime || event.start_time, event.endTime || event.end_time)}
+                                </div>
+                                
+                                {(event.location) && (
+                                  <div className="schedule-item-location">
+                                    📍 {event.location}
+                                  </div>
+                                )}
+                                
+                                {(event.description || event.event_description) && (
+                                  <div className="schedule-item-description">
+                                    {event.description || event.event_description}
+                                  </div>
+                                )}
+                              </div>
+                              
+                              <div className="schedule-item-actions">
+                                <button 
+                                  onClick={() => startEditingEvent(schedule.name || scheduleId, event)} 
+                                  className="edit-btn"
+                                  title="Edit event"
+                                >
+                                  ✏️
+                                </button>
+                                <button 
+                                  onClick={() => deleteEvent(schedule.name || scheduleId, event)} 
+                                  className="delete-btn"
+                                  title="Delete event"
+                                >
+                                  🗑️
+                                </button>
+                              </div>
+                            </>
+                          )}
                         </div>
-                        {event.time && (
-                          <div className="schedule-item-time">
-                            📅 {typeof event.time === 'string' ? event.time : formatDate(event.time)}
-                          </div>
-                        )}
-                        {event.description && (
-                          <div className="schedule-item-description">
-                            {event.description}
-                          </div>
-                        )}
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </CollapsibleSection>
@@ -408,7 +679,10 @@ const ContentDisplay = ({
     return (
       <div className="memory-content">
         {!hasMemory ? (
-          <EmptyState mode="memory" />
+          <div className="empty-state">
+            <h3>🧠 No memories stored</h3>
+            <p>Store information by saying "Remember that my birthday is June 15th"</p>
+          </div>
         ) : (
           <>
             <h3 className="content-title">🧠 Your Memory</h3>
@@ -422,16 +696,13 @@ const ContentDisplay = ({
               >
                 {!category.items || category.items.length === 0 ? (
                   <div className="empty-memory-message">
-                    No information stored. Add items by saying "Remember that..."
+                    No information stored.
                   </div>
                 ) : (
                   <div className="memory-items">
                     {category.items.map((item, index) => (
                       <div key={index} className="memory-item">
-                        <span className="memory-item-icon">💭</span>
-                        <span className="memory-item-content">
-                          {typeof item === 'string' ? item : item.content || item.info || JSON.stringify(item)}
-                        </span>
+                        {typeof item === 'string' ? item : item.text || item.information || 'Stored information'}
                       </div>
                     ))}
                   </div>
@@ -445,35 +716,45 @@ const ContentDisplay = ({
   };
 
   // Main render method
-  const renderContent = () => {
-    if (isDataLoading) {
+  if (isDataLoading) {
+    return (
+      <div className="loading-state">
+        <div className="loading-spinner">⏳</div>
+        <p>Loading your data...</p>
+      </div>
+    );
+  }
+
+  switch (currentMode) {
+    case 'lists':
+      return renderListsContent();
+    case 'schedule':
+      return renderSchedulesContent();
+    case 'memory':
+      return renderMemoryContent();
+    case 'chat':
+    default:
       return (
-        <div className="loading-state">
-          <div className="loading-spinner">⏳</div>
-          <p>Loading your data...</p>
+        <div className="chat-content">
+          {messages.length === 0 ? (
+            <div className="empty-state">
+              <h3>💬 Start a conversation</h3>
+              <p>Ask me to create lists, schedule events, or store memories!</p>
+            </div>
+          ) : (
+            <div className="messages-display">
+              {messages.map((message, index) => (
+                <div key={index} className={`message ${message.type}-message`}>
+                  <strong>{message.type === 'user' ? 'You' : 'AI'}:</strong>
+                  <span>{message.text}</span>
+                  <small>{formatDate(message.timestamp)}</small>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       );
-    }
-
-    switch(currentMode) {
-      case 'chat':
-        return renderChatContent();
-      case 'lists':
-        return renderListsContent();
-      case 'schedule':
-        return renderScheduleContent();
-      case 'memory':
-        return renderMemoryContent();
-      default:
-        return renderChatContent();
-    }
-  };
-
-  return (
-    <div className="content-container">
-      {renderContent()}
-    </div>
-  );
+  }
 };
 
 export default ContentDisplay;
