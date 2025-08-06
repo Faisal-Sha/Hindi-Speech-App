@@ -220,6 +220,66 @@ function App() {
       console.error('❌ Error editing event:', error);
     }
   };
+
+  /**
+ * Handle memory item updates (edit)
+ */
+const handleUpdateMemoryItem = async (action) => {
+  if (!currentUser) {
+    console.error('❌ No user selected');
+    return;
+  }
+
+  try {
+    console.log('📝 Handling memory item update:', action);
+    await handleAiActions([action], currentUser.user_id);
+    console.log('✅ Memory item updated successfully');
+    await saveDataChanges([action]);
+    
+  } catch (error) {
+    console.error('❌ Error updating memory item:', error);
+  }
+};
+
+/**
+ * Handle memory item deletion
+ */
+const handleDeleteMemoryItem = async (action) => {
+  if (!currentUser) {
+    console.error('❌ No user selected');
+    return;
+  }
+
+  try {
+    console.log('🗑️ Handling memory item deletion:', action);
+    await handleAiActions([action], currentUser.user_id);
+    console.log('✅ Memory item deleted successfully');
+    await saveDataChanges([action]);
+    
+  } catch (error) {
+    console.error('❌ Error deleting memory item:', error);
+  }
+};
+
+/**
+ * Handle memory category deletion
+ */
+const handleDeleteMemory = async (action) => {
+  if (!currentUser) {
+    console.error('❌ No user selected');
+    return;
+  }
+
+  try {
+    console.log('🗑️ Handling memory category deletion:', action);
+    await handleAiActions([action], currentUser.user_id);
+    console.log('✅ Memory category deleted successfully');
+    await saveDataChanges([action]);
+    
+  } catch (error) {
+    console.error('❌ Error deleting memory category:', error);
+  }
+};
   /**
  * Update local state for list items
  * This mimics the update_list logic from useDataManagement
@@ -485,6 +545,9 @@ function App() {
         onDeleteSchedule={handleDeleteSchedule}   
         onDeleteEvent={handleDeleteEvent}         
         onEditEvent={handleEditEvent}
+        onUpdateMemoryItem={handleUpdateMemoryItem}
+        onDeleteMemoryItem={handleDeleteMemoryItem}
+        onDeleteMemory={handleDeleteMemory}
       />
 
 

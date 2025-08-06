@@ -12,7 +12,10 @@ const ContentDisplay = ({
   onDeleteList,
   onEditEvent, 
   onDeleteEvent, 
-  onDeleteSchedule   
+  onDeleteSchedule, 
+  onUpdateMemoryItem,
+  onDeleteMemoryItem, 
+  onDeleteMemory 
 }) => {
 
   // ===== STATE MANAGEMENT =====
@@ -20,6 +23,8 @@ const ContentDisplay = ({
   const [editText, setEditText] = useState('');
   const [editingEvent, setEditingEvent] = useState(null);
   const [editEventData, setEditEventData] = useState({});
+  const [editingMemoryItem, setEditingMemoryItem] = useState(null);
+  const [editMemoryData, setEditMemoryData] = useState({});
 
   const isEditingRef = useRef(false);
 
@@ -409,6 +414,118 @@ const ContentDisplay = ({
 
   
 
+  //Memory
+  // Add memory editing functions
+  const startEditingMemoryItem = useCallback((categoryName, item) => {
+    console.log('📝 Starting to edit memory item:', item);
+    
+    setEditingMemoryItem({ categoryName, itemId: item.id });
+    
+    // Prepare edit data based on item structure
+    const editData = {
+      key: item.key || item.memoryKey || item.label || item.name || '',
+      value: item.value || item.memoryValue || item.content || item.text || ''
+    };
+    
+    console.log('📝 Memory edit data prepared:', editData);
+    setEditMemoryData(editData);
+  }, []);
+  
+  const saveEditingMemoryItem = useCallback(async () => {
+    if (!editingMemoryItem || !onUpdateMemoryItem) {
+      console.error('❌ No memory item being edited or no update handler');
+      return;
+    }
+    
+    try {
+      console.log('💾 Saving memory item changes...');
+      
+      // Prepare updates object
+      const updates = {};
+      
+      if (editMemoryData.key !== undefined) {
+        updates.key = editMemoryData.key.trim();
+        updates.memoryKey = editMemoryData.key.trim(); // For compatibility
+      }
+      
+      if (editMemoryData.value !== undefined) {
+        updates.value = editMemoryData.value.trim();
+        updates.memoryValue = editMemoryData.value.trim(); // For compatibility
+      }
+      
+      console.log('📝 Final memory updates:', updates);
+      
+      // Call the update handler
+      await onUpdateMemoryItem({
+        type: 'update_memory',
+        data: {
+          categoryName: editingMemoryItem.categoryName,
+          itemId: editingMemoryItem.itemId,
+          operation: 'edit',
+          updates: updates
+        }
+      });
+      
+      // Reset editing state
+      setEditingMemoryItem(null);
+      setEditMemoryData({});
+      
+      console.log('✅ Memory item saved successfully');
+      
+    } catch (error) {
+      console.error('❌ Error saving memory item:', error);
+      // Don't reset the editing state if there's an error
+    }
+  }, [onUpdateMemoryItem, editingMemoryItem, editMemoryData]);
+
+  const updateMemoryField = useCallback((field, value) => {
+    console.log(`📝 Updating memory field ${field} to:`, value);
+    setEditMemoryData(prev => ({
+      ...prev,
+      [field]: value
+    }));
+  }, []);
+
+  const cancelEditingMemoryItem = useCallback(() => {
+    console.log('❌ Cancelling memory item edit');
+    setEditingMemoryItem(null);
+    setEditMemoryData({});
+  }, []);
+
+  // Delete functions
+  const deleteMemoryItem = (categoryName, item) => {
+    const itemName = item.key || item.memoryKey || item.label || 'this memory';
+    if (window.confirm(`Are you sure you want to delete "${itemName}"?`)) {
+      if (onDeleteMemoryItem) {
+        console.log(`🗑️ Deleting memory item: ${item.id} from ${categoryName}`);
+        onDeleteMemoryItem({
+          type: 'delete_memory_item',
+          data: { 
+            categoryName: categoryName,
+            itemId: item.id 
+          }
+        });
+      } else {
+        console.warn('onDeleteMemoryItem handler not provided');
+      }
+    }
+  };
+
+  const deleteMemory = (categoryName) => {
+    if (window.confirm(`Are you sure you want to delete the entire memory category "${categoryName}"? This will remove all information in this category.`)) {
+      if (onDeleteMemory) {
+        console.log(`🗑️ Deleting memory category: ${categoryName}`);
+        onDeleteMemory({
+          type: 'delete_memory',
+          data: { name: categoryName }
+        });
+      } else {
+        console.warn('onDeleteMemory handler not provided');
+      }
+    }
+  };
+
+
   // Empty state component - no need for separate file
   const EmptyState = ({ mode }) => {
     const emptyMessages = {
@@ -740,6 +857,7 @@ const ContentDisplay = ({
                 count={category.items?.length || 0}
                 subtitle={`Created ${formatDate(category.created)}`}
                 defaultExpanded={true}
+                onDelete={() => deleteMemory(category.name || categoryId)}
               >
                 {!category.items || category.items.length === 0 ? (
                   <div className="empty-memory-message">
@@ -748,58 +866,115 @@ const ContentDisplay = ({
                 ) : (
                   <div className="memory-items">
                     {category.items.map((item, index) => {
-                      // STEP 1: Determine what content to show
+                      const isEditing = editingMemoryItem?.categoryName === (category.name || categoryId) && 
+                                       editingMemoryItem?.itemId === item.id;
+                      
+                      // Determine what content to show
                       let displayContent;
                       let displayLabel;
                       
                       if (typeof item === 'string') {
-                        // CASE 1: Simple string item
                         displayContent = item;
                         displayLabel = null;
                       } else if (item && typeof item === 'object') {
-                        // CASE 2: Object with structured data
-                        
-                        // Extract the label (what this memory is about)
                         displayLabel = item.key || item.memoryKey || item.label || item.name;
+                        displayContent = item.value || item.memoryValue || item.content || item.text || 'Stored information';
                         
-                        // Extract the content (the actual information)
-                        displayContent = item.value || 
-                                       item.memoryValue || 
-                                       item.content || 
-                                       item.text || 
-                                       item.information ||
-                                       item.data ||
-                                       'Stored information';
-                        
-                        // If content is an object, stringify it nicely
                         if (typeof displayContent === 'object') {
                           displayContent = JSON.stringify(displayContent, null, 2);
                         }
                       } else {
-                        // CASE 3: Fallback for unexpected data
                         displayContent = 'Stored information';
                         displayLabel = null;
                       }
                       
                       return (
-                        <div key={index} className="memory-item">
+                        <div key={item.id || index} className="memory-item">
                           <div className="memory-item-icon">💭</div>
                           <div className="memory-item-content">
-                            {/* STEP 2: Show label if it exists and is different from content */}
+                            {/* Editable label */}
                             {displayLabel && displayLabel !== displayContent && (
                               <div className="memory-item-label">
-                                <strong>{displayLabel}:</strong>
+                                {isEditing ? (
+                                  <input
+                                    type="text"
+                                    value={editMemoryData.key || ''}
+                                    onChange={(e) => updateMemoryField('key', e.target.value)}
+                                    placeholder="Memory label..."
+                                    className="edit-input"
+                                  />
+                                ) : (
+                                  <strong>{displayLabel}:</strong>
+                                )}
                               </div>
                             )}
-                            {/* STEP 3: Always show the actual content */}
+                            
+                            {/* Editable content */}
                             <div className="memory-item-value">
-                              {displayContent}
+                              {isEditing ? (
+                                <textarea
+                                  value={editMemoryData.value || ''}
+                                  onChange={(e) => updateMemoryField('value', e.target.value)}
+                                  placeholder="Memory content..."
+                                  className="edit-textarea"
+                                  rows="3"
+                                  onKeyPress={(e) => {
+                                    if (e.key === 'Enter' && e.ctrlKey) {
+                                      saveEditingMemoryItem();
+                                    } else if (e.key === 'Escape') {
+                                      cancelEditingMemoryItem();
+                                    }
+                                  }}
+                                />
+                              ) : (
+                                displayContent
+                              )}
                             </div>
-                            {/* STEP 4: Show metadata if available */}
-                            {item && typeof item === 'object' && item.created && (
+                            
+                            {/* Show metadata if available and not editing */}
+                            {!isEditing && item && typeof item === 'object' && item.created && (
                               <div className="memory-item-meta">
                                 Stored {formatDate(item.created)}
                               </div>
+                            )}
+                          </div>
+                          
+                          {/* Action buttons */}
+                          <div className="memory-item-actions">
+                            {isEditing ? (
+                              <>
+                                <button 
+                                  onClick={saveEditingMemoryItem} 
+                                  className="save-btn"
+                                  title="Save changes (Ctrl+Enter)"
+                                >
+                                  ✅
+                                </button>
+                                <button 
+                                  onClick={cancelEditingMemoryItem} 
+                                  className="cancel-btn"
+                                  title="Cancel editing (Esc)"
+                                >
+                                  ❌
+                                </button>
+                              </>
+                            ) : (
+                              <>
+                                <button 
+                                  onClick={() => startEditingMemoryItem(category.name || categoryId, item)} 
+                                  className="edit-btn"
+                                  title="Edit this memory"
+                                >
+                                  ✏️
+                                </button>
+                                <button 
+                                  onClick={() => deleteMemoryItem(category.name || categoryId, item)} 
+                                  className="delete-btn"
+                                  title="Delete this memory"
+                                >
+                                  🗑️
+                                </button>
+                              </>
                             )}
                           </div>
                         </div>

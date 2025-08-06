@@ -1239,6 +1239,226 @@ async function getUserMemories(userId) {
   }
 }
 
+/**
+ * Update a memory item
+ * @param {string} userId - The user ID
+ * @param {string} categoryName - The category name
+ * @param {number} itemId - The memory item ID
+ * @param {object} updates - The updates to apply
+ * @returns {object} The updated memory item
+ */
+async function updateMemoryItem(userId, categoryName, itemId, updates) {
+  try {
+    console.log(`📝 Updating memory item ${itemId} in category "${categoryName}" for user ${userId}`);
+    console.log('📝 Updates to apply:', updates);
+    
+    // Step 1: Find the memory item to make sure it exists
+    const itemCheck = await pool.query(`
+      SELECT mi.id, mi.memory_key, mi.memory_value, mc.category_name
+      FROM memory_items mi
+      JOIN memory_categories mc ON mi.category_id = mc.id
+      WHERE mi.id = $1 AND mc.user_id = $2 AND mc.category_name = $3
+    `, [itemId, userId, categoryName]);
+    
+    if (itemCheck.rows.length === 0) {
+      throw new Error(`Memory item ${itemId} not found in category "${categoryName}" for user ${userId}`);
+    }
+    
+    const originalItem = itemCheck.rows[0];
+    console.log(`📝 Found item to update: ${originalItem.memory_key} = ${originalItem.memory_value}`);
+    
+    // Step 2: Prepare the update fields
+    const updateFields = [];
+    const updateValues = [];
+    let parameterIndex = 1;
+    
+    // Handle memory key update
+    if (updates.key || updates.memoryKey) {
+      updateFields.push(`memory_key = $${parameterIndex}`);
+      updateValues.push(updates.key || updates.memoryKey);
+      parameterIndex++;
+    }
+    
+    // Handle memory value update
+    if (updates.value || updates.memoryValue) {
+      updateFields.push(`memory_value = $${parameterIndex}`);
+      updateValues.push(updates.value || updates.memoryValue);
+      parameterIndex++;
+    }
+    
+    // Always update the timestamp
+    updateFields.push('updated_at = CURRENT_TIMESTAMP');
+    
+    if (updateFields.length === 1) { // Only timestamp update
+      throw new Error('No valid updates provided');
+    }
+    
+    // Add WHERE clause parameters
+    updateValues.push(itemId, userId, categoryName);
+    const whereClause = `WHERE mi.id = $${parameterIndex} 
+                        AND mc.user_id = $${parameterIndex + 1} 
+                        AND mc.category_name = $${parameterIndex + 2}`;
+    
+    // Step 3: Execute the update
+    const updateQuery = `
+      UPDATE memory_items mi 
+      SET ${updateFields.join(', ')}
+      FROM memory_categories mc
+      WHERE mi.category_id = mc.id 
+      AND mi.id = $${parameterIndex} 
+      AND mc.user_id = $${parameterIndex + 1} 
+      AND mc.category_name = $${parameterIndex + 2}
+      RETURNING mi.*, mc.category_name
+    `;
+    
+    console.log('📝 Executing update query:', updateQuery);
+    console.log('📝 Update values:', updateValues);
+    
+    const result = await pool.query(updateQuery, updateValues);
+    
+    if (result.rows.length === 0) {
+      throw new Error('Update failed - no rows affected');
+    }
+    
+    const updatedItem = result.rows[0];
+    console.log(`✅ Successfully updated memory item:`, {
+      id: updatedItem.id,
+      key: updatedItem.memory_key,
+      value: updatedItem.memory_value,
+      updated_at: updatedItem.updated_at
+    });
+    
+    return updatedItem;
+    
+  } catch (error) {
+    console.error('❌ Error in updateMemoryItem:', error);
+    console.error('❌ Stack trace:', error.stack);
+    throw error;
+  }
+}
+
+/**
+ * Delete a memory item
+ * @param {string} userId - The user ID
+ * @param {string} categoryName - The category name
+ * @param {number} itemId - The memory item ID to delete
+ * @returns {object} The deleted memory item
+ */
+async function deleteMemoryItem(userId, categoryName, itemId) {
+  try {
+    console.log(`🗑️ Deleting memory item ${itemId} from category "${categoryName}" for user ${userId}`);
+    
+    // Step 1: Get the item before deleting for confirmation
+    const itemCheck = await pool.query(`
+      SELECT mi.id, mi.memory_key, mi.memory_value, mc.category_name
+      FROM memory_items mi
+      JOIN memory_categories mc ON mi.category_id = mc.id
+      WHERE mi.id = $1 AND mc.user_id = $2 AND mc.category_name = $3
+    `, [itemId, userId, categoryName]);
+    
+    if (itemCheck.rows.length === 0) {
+      throw new Error(`Memory item ${itemId} not found in category "${categoryName}" for user ${userId}`);
+    }
+    
+    const itemToDelete = itemCheck.rows[0];
+    console.log(`🗑️ Found item to delete: ${itemToDelete.memory_key} = ${itemToDelete.memory_value}`);
+    
+    // Step 2: Delete the item
+    const deleteQuery = `
+      DELETE FROM memory_items mi
+      USING memory_categories mc
+      WHERE mi.category_id = mc.id 
+      AND mi.id = $1 
+      AND mc.user_id = $2 
+      AND mc.category_name = $3
+      RETURNING mi.*, mc.category_name
+    `;
+    
+    const result = await pool.query(deleteQuery, [itemId, userId, categoryName]);
+    
+    if (result.rows.length === 0) {
+      throw new Error('Delete failed - no rows affected');
+    }
+    
+    const deletedItem = result.rows[0];
+    console.log(`✅ Successfully deleted memory item:`, {
+      id: deletedItem.id,
+      key: deletedItem.memory_key,
+      value: deletedItem.memory_value,
+      from_category: deletedItem.category_name
+    });
+    
+    return deletedItem;
+    
+  } catch (error) {
+    console.error('❌ Error in deleteMemoryItem:', error);
+    console.error('❌ Stack trace:', error.stack);
+    throw error;
+  }
+}
+
+/**
+ * Delete an entire memory category
+ * @param {string} userId - The user ID
+ * @param {string} categoryName - The category name to delete
+ * @returns {object} Summary of what was deleted
+ */
+async function deleteMemoryCategory(userId, categoryName) {
+  try {
+    console.log(`🗑️ Deleting entire memory category "${categoryName}" for user ${userId}`);
+    
+    // Step 1: Get category info and count items
+    const categoryCheck = await pool.query(`
+      SELECT mc.id, mc.category_name, COUNT(mi.id) as item_count
+      FROM memory_categories mc
+      LEFT JOIN memory_items mi ON mc.id = mi.category_id
+      WHERE mc.user_id = $1 AND mc.category_name = $2
+      GROUP BY mc.id, mc.category_name
+    `, [userId, categoryName]);
+    
+    if (categoryCheck.rows.length === 0) {
+      throw new Error(`Memory category "${categoryName}" not found for user ${userId}`);
+    }
+    
+    const category = categoryCheck.rows[0];
+    const categoryId = category.id;
+    const itemCount = parseInt(category.item_count) || 0;
+    
+    console.log(`🗑️ Found category to delete: "${category.category_name}" with ${itemCount} items`);
+    
+    // Step 2: Delete all memory items in the category first (foreign key constraint)
+    const deleteItemsResult = await pool.query(
+      'DELETE FROM memory_items WHERE category_id = $1',
+      [categoryId]
+    );
+    
+    console.log(`🗑️ Deleted ${deleteItemsResult.rowCount} memory items from category`);
+    
+    // Step 3: Delete the category itself
+    const deleteCategoryResult = await pool.query(
+      'DELETE FROM memory_categories WHERE id = $1 RETURNING *',
+      [categoryId]
+    );
+    
+    const deletedCategory = deleteCategoryResult.rows[0];
+    console.log(`✅ Successfully deleted memory category:`, {
+      id: deletedCategory.id,
+      name: deletedCategory.category_name,
+      deletedItems: deleteItemsResult.rowCount
+    });
+    
+    return {
+      ...deletedCategory,
+      deletedItemsCount: deleteItemsResult.rowCount
+    };
+    
+  } catch (error) {
+    console.error('❌ Error in deleteMemoryCategory:', error);
+    console.error('❌ Stack trace:', error.stack);
+    throw error;
+  }
+}
+
 /* Get all User Data */
 
 async function getAllUserData(userId) {
@@ -1400,6 +1620,9 @@ module.exports = {
     createMemoryCategory, 
     addMemoryItem,
     getUserMemories,
+    updateMemoryItem, 
+    deleteMemoryItem, 
+    deleteMemoryCategory,
     getAllUserData, 
     buildSmartContext
 };
