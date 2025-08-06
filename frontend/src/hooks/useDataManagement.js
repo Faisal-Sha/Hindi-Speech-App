@@ -785,77 +785,125 @@ const useDataManagement = (messages = []) => { // Default empty array to prevent
               });
               break;
             
-            case 'delete_memory':
-              console.log('🗑️ Deleting memory category with data:', action.data);
-              
-              const memoryToDelete = action.data?.name || action.data?.category;
-              
-              setUserMemory(prev => {
-                const matchingMemoryName = findBestMatchingItem(memoryToDelete, prev, 'memory');
-                
-                if (matchingMemoryName && prev[matchingMemoryName]) {
-                  const newState = { ...prev };
-                  delete newState[matchingMemoryName];
-                  
-                  console.log(`✅ Deleted memory category "${matchingMemoryName}"`);
-                  return newState;
-                } else {
-                  console.error(`❌ Memory category "${memoryToDelete}" not found for deletion`);
-                  return prev;
-                }
-              });
-              break;
             
-            case 'update_memory':
-              console.log('🧠 Updating memory with data:', action.data);
-              
-              const targetMemory = action.data?.categoryName || action.data?.category;
-              const memoryItemId = action.data?.itemId;
-              const memoryOperation = action.data?.operation; // 'edit', 'delete'
-              const memoryUpdates = action.data?.updates || {};
-              
-              setUserMemory(prev => {
-                const matchingMemoryName = findBestMatchingItem(targetMemory, prev, 'memory');
+              case 'update_memory':
+                console.log('📝 Updating memory with data:', action.data);
                 
-                if (matchingMemoryName && prev[matchingMemoryName]) {
-                  const memoryToUpdate = prev[matchingMemoryName];
-                  let updatedItems = [...memoryToUpdate.items];
+                const targetMemory = action.data?.categoryName || action.data?.category;
+                const memoryItemId = action.data?.itemId;
+                const memoryOperation = action.data?.operation; // 'edit', 'delete'
+                const memoryUpdates = action.data?.updates || {};
+                
+                setUserMemory(prev => {
+                  const matchingMemoryName = findBestMatchingItem(targetMemory, prev, 'memory');
                   
-                  if (memoryItemId) {
-                    const itemIndex = updatedItems.findIndex(item => item.id === memoryItemId);
-                    if (itemIndex !== -1) {
-                      switch (memoryOperation) {
-                        case 'edit':
-                          updatedItems[itemIndex] = { 
-                            ...updatedItems[itemIndex], 
-                            ...memoryUpdates,
-                            lastUpdated: new Date() 
-                          };
-                          break;
-                        case 'delete':
-                          updatedItems.splice(itemIndex, 1);
-                          break;
-                        default:
-                          console.error(`❌ Unknown memory operation: ${memoryOperation}`);
-                          return prev;
+                  if (matchingMemoryName && prev[matchingMemoryName]) {
+                    const memoryToUpdate = prev[matchingMemoryName];
+                    let updatedItems = [...memoryToUpdate.items];
+                    
+                    if (memoryItemId) {
+                      const itemIndex = updatedItems.findIndex(item => item.id === memoryItemId);
+                      if (itemIndex !== -1) {
+                        switch (memoryOperation) {
+                          case 'edit':
+                            updatedItems[itemIndex] = { 
+                              ...updatedItems[itemIndex], 
+                              ...memoryUpdates,
+                              lastUpdated: new Date() 
+                            };
+                            console.log(`✅ Updated memory item: ${updatedItems[itemIndex].key || updatedItems[itemIndex].memoryKey}`);
+                            break;
+                          case 'delete':
+                            const deletedItem = updatedItems[itemIndex];
+                            updatedItems.splice(itemIndex, 1);
+                            console.log(`🗑️ Deleted memory item: ${deletedItem.key || deletedItem.memoryKey}`);
+                            break;
+                          default:
+                            console.error(`❌ Unknown memory operation: ${memoryOperation}`);
+                            return prev;
+                        }
+                        
+                        const updatedMemory = {
+                          ...memoryToUpdate,
+                          items: updatedItems,
+                          lastUpdated: new Date()
+                        };
+                        
+                        return { ...prev, [matchingMemoryName]: updatedMemory };
+                      } else {
+                        console.error(`❌ Memory item ${memoryItemId} not found in category "${matchingMemoryName}"`);
+                        return prev;
                       }
+                    } else {
+                      console.error('❌ Memory item ID required for update operation');
+                      return prev;
                     }
+                  } else {
+                    console.error(`❌ Memory category "${targetMemory}" not found for update`);
+                    return prev;
                   }
+                });
+                break;
+              
+              // Add this new case after the existing cases:
+              case 'delete_memory_item':
+                console.log('🗑️ Deleting memory item with data:', action.data);
+                
+                const deleteMemoryCategory = action.data?.categoryName || action.data?.category;
+                const deleteMemoryItemId = action.data?.itemId;
+                
+                setUserMemory(prev => {
+                  const matchingMemoryName = findBestMatchingItem(deleteMemoryCategory, prev, 'memory');
                   
-                  const updatedMemory = {
-                    ...memoryToUpdate,
-                    items: updatedItems,
-                    lastUpdated: new Date()
-                  };
+                  if (matchingMemoryName && prev[matchingMemoryName]) {
+                    const memoryToUpdate = prev[matchingMemoryName];
+                    let updatedItems = [...memoryToUpdate.items];
+                    
+                    const itemIndex = updatedItems.findIndex(item => item.id === deleteMemoryItemId);
+                    if (itemIndex !== -1) {
+                      const deletedItem = updatedItems[itemIndex];
+                      updatedItems.splice(itemIndex, 1);
+                      
+                      console.log(`🗑️ Deleted memory item: ${deletedItem.key || deletedItem.memoryKey}`);
+                      
+                      const updatedMemory = {
+                        ...memoryToUpdate,
+                        items: updatedItems,
+                        lastUpdated: new Date()
+                      };
+                      
+                      return { ...prev, [matchingMemoryName]: updatedMemory };
+                    } else {
+                      console.error(`❌ Memory item ${deleteMemoryItemId} not found in category "${matchingMemoryName}"`);
+                      return prev;
+                    }
+                  } else {
+                    console.error(`❌ Memory category "${deleteMemoryCategory}" not found for item deletion`);
+                    return prev;
+                  }
+                });
+                break;
+
+              case 'delete_memory':
+                console.log('🗑️ Deleting memory category with data:', action.data);
+                
+                const memoryToDelete = action.data?.name || action.data?.category;
+                
+                setUserMemory(prev => {
+                  const matchingMemoryName = findBestMatchingItem(memoryToDelete, prev, 'memory');
                   
-                  console.log(`✅ Updated memory category "${matchingMemoryName}"`);
-                  return { ...prev, [matchingMemoryName]: updatedMemory };
-                } else {
-                  console.error(`❌ Memory category "${targetMemory}" not found for update`);
-                  return prev;
-                }
-              });
-              break;
+                  if (matchingMemoryName && prev[matchingMemoryName]) {
+                    const newState = { ...prev };
+                    delete newState[matchingMemoryName];
+                    
+                    console.log(`✅ Deleted memory category "${matchingMemoryName}"`);
+                    return newState;
+                  } else {
+                    console.error(`❌ Memory category "${memoryToDelete}" not found for deletion`);
+                    return prev;
+                  }
+                });
+                break;
                       
           default:
             console.log('❓ Unknown action type:', action.type);

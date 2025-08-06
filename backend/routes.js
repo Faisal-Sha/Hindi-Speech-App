@@ -24,6 +24,9 @@ const {
   createMemoryCategory, 
   addMemoryItem,
   getUserMemories,
+  updateMemoryItem, 
+  deleteMemoryItem, 
+  deleteMemoryCategory,
   getAllUserData, 
   buildSmartContext
 } = require('./database');
@@ -55,19 +58,22 @@ const SYSTEM_PROMPT = `You are an intelligent multilingual personal assistant. Y
     ❌ User: "add birthday cake to TODO list" → Respect "TODO list", don't override with Birthday List
 
     🤖 AVAILABLE ACTIONS (detect these from user intent in any language):
-    - create_list: Create new lists (any type: shopping, todo, books, movies, travel, etc.)
-    - add_to_list: Add items to existing lists (RESPECT user's specified list name)
-    - update_list: Mark items as complete, edit, or remove
-    - delete_list: Delete entire lists
-    - create_schedule: Create schedule categories
-    - add_event: Add events/appointments to schedules  
-    - update_event: Modify or cancel events
-    - delete_event: Delete individual events from schedules
-    - edit_event: Edit/modify individual events in schedules
-    - delete_schedule: Delete entire schedules
-    - create_memory: Create memory categories (contacts, notes, passwords, etc.)
-    - store_memory: Store any information in memory
-    - delete_memory: Delete entire memory categories
+      - create_list: Create new lists (any type: shopping, todo, books, movies, travel, etc.)
+      - add_to_list: Add items to existing lists (RESPECT user's specified list name)
+      - update_list: Mark items as complete, edit, or remove
+      - delete_list: Delete entire lists
+      - create_schedule: Create schedule categories
+      - add_event: Add events/appointments to schedules  
+      - update_event: Modify or cancel events
+      - delete_event: Delete individual events from schedules
+      - edit_event: Edit/modify individual events in schedules
+      - delete_schedule: Delete entire schedules
+      - create_memory: Create memory categories (contacts, notes, passwords, etc.)
+      - store_memory: Store any information in memory
+      - update_memory: Edit individual memory items 
+      - delete_memory_item: Delete individual memory items 
+      - delete_memory: Delete entire memory categories
+
 
 
     📋 RESPONSE FORMAT - ALWAYS return valid JSON:
@@ -287,6 +293,83 @@ User: "Note that the meeting is moved to Friday"
     }
   }]
 }
+
+EDITING MEMORY ITEMS:
+User: "Edit John's phone number to 555-9999"
+{
+  "response": "I've updated John's phone number to 555-9999!",
+  "actions": [{
+    "type": "update_memory",
+    "data": {
+      "categoryName": "Contacts",
+      "itemId": 123,
+      "operation": "edit",
+      "updates": {
+        "key": "John Phone",
+        "value": "555-9999"
+      }
+    }
+  }]
+}
+
+User: "Change my Gmail password to newpass123"
+{
+  "response": "I've updated your Gmail password!",
+  "actions": [{
+    "type": "update_memory",
+    "data": {
+      "categoryName": "Passwords", 
+      "itemId": 456,
+      "operation": "edit",
+      "updates": {
+        "value": "newpass123"
+      }
+    }
+  }]
+}
+
+DELETING MEMORY ITEMS:
+User: "Delete John's phone number"
+{
+  "response": "I've deleted John's phone number from your contacts!",
+  "actions": [{
+    "type": "delete_memory_item",
+    "data": {
+      "categoryName": "Contacts",
+      "itemId": 123
+    }
+  }]
+}
+
+User: "Remove my old Gmail password"
+{
+  "response": "I've removed your Gmail password!",
+  "actions": [{
+    "type": "delete_memory_item", 
+    "data": {
+      "categoryName": "Passwords",
+      "itemId": 456
+    }
+  }]
+}
+
+DELETING MEMORY CATEGORIES:
+User: "Delete the entire Contacts category"
+{
+  "response": "I've deleted your entire Contacts category and all contact information!",
+  "actions": [{
+    "type": "delete_memory",
+    "data": {
+      "name": "Contacts"
+    }
+  }]
+}
+
+SMART MEMORY ITEM IDENTIFICATION:
+- AI will identify memory items by matching key content in voice commands
+- "John's phone" → Look for item with key containing "John" and "phone"
+- "Gmail password" → Look for item with key containing "Gmail" and "password"
+- "Meeting note" → Look for item with key containing "meeting" or "note"
 
 AUTOMATIC CATEGORY DETECTION:
 - Phone numbers, emails, addresses → "Contacts" category
@@ -866,6 +949,85 @@ async function processAIActions(userId, actions) {
                     } 
                 });
                 break;
+            
+              case 'update_memory':
+                console.log('📝 Updating memory item with data:', action.data);
+                
+                const updateMemoryData = action.data;
+                const targetCategory = updateMemoryData?.categoryName || updateMemoryData?.category;
+                const memoryItemId = updateMemoryData?.itemId;
+                const memoryUpdates = updateMemoryData?.updates || {};
+                
+                if (!targetCategory || !memoryItemId) {
+                  throw new Error('Category name and item ID required for update_memory');
+                }
+                
+                await updateMemoryItem(
+                  userId,
+                  targetCategory,
+                  memoryItemId,
+                  memoryUpdates
+                );
+                
+                results.push({ 
+                  success: true, 
+                  type: 'update_memory', 
+                  data: { 
+                    category: targetCategory,
+                    itemId: memoryItemId,
+                    updates: memoryUpdates
+                  } 
+                });
+                break;
+                
+              case 'delete_memory_item':
+                console.log('🗑️ Deleting memory item with data:', action.data);
+                
+                const deleteItemData = action.data;
+                const deleteCategory = deleteItemData?.categoryName || deleteItemData?.category;
+                const deleteItemId = deleteItemData?.itemId;
+                
+                if (!deleteCategory || !deleteItemId) {
+                  throw new Error('Category name and item ID required for delete_memory_item');
+                }
+                
+                await deleteMemoryItem(
+                  userId,
+                  deleteCategory,
+                  deleteItemId
+                );
+                
+                results.push({ 
+                  success: true, 
+                  type: 'delete_memory_item', 
+                  data: { 
+                    category: deleteCategory,
+                    itemId: deleteItemId
+                  } 
+                });
+                break;
+                
+                
+              case 'delete_memory':
+                console.log('🗑️ Deleting memory category with data:', action.data);
+                
+                const deleteCategoryData = action.data;
+                const categoryToDelete = deleteCategoryData?.name || deleteCategoryData?.category;
+                
+                if (!categoryToDelete) {
+                  throw new Error('Category name required for delete_memory');
+                }
+                
+                await deleteMemoryCategory(userId, categoryToDelete);
+                
+                results.push({ 
+                  success: true, 
+                  type: 'delete_memory', 
+                  data: { 
+                    category: categoryToDelete
+                  } 
+                });
+                  break;
               
             
             default:

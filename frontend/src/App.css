@@ -1744,6 +1744,196 @@ div, span, button, input, h1, h2, h3, p {
     font-size: 0.8rem;
   }
 }
+
+/* Memory Item Actions */
+.memory-item-actions {
+  display: flex;
+  gap: var(--spacing-xs);
+  align-items: flex-start;
+  flex-shrink: 0;
+  margin-left: var(--spacing-sm);
+}
+
+.memory-item-actions .edit-btn,
+.memory-item-actions .delete-btn,
+.memory-item-actions .save-btn,
+.memory-item-actions .cancel-btn {
+  background: none;
+  border: none;
+  font-size: 1.1rem;
+  cursor: pointer;
+  padding: 0.4rem;
+  border-radius: var(--radius-sm);
+  transition: all var(--transition-fast);
+  min-width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.memory-item-actions .edit-btn {
+  background: rgba(52, 152, 219, 0.1);
+  color: #3498db;
+}
+
+.memory-item-actions .edit-btn:hover {
+  background: rgba(52, 152, 219, 0.2);
+  transform: scale(1.1);
+}
+
+.memory-item-actions .delete-btn {
+  background: rgba(231, 76, 60, 0.1);
+  color: #e74c3c;
+}
+
+.memory-item-actions .delete-btn:hover {
+  background: rgba(231, 76, 60, 0.2);
+  transform: scale(1.1);
+}
+
+.memory-item-actions .save-btn {
+  background: rgba(39, 174, 96, 0.1);
+  color: #27ae60;
+}
+
+.memory-item-actions .save-btn:hover {
+  background: rgba(39, 174, 96, 0.2);
+  transform: scale(1.1);
+}
+
+.memory-item-actions .cancel-btn {
+  background: rgba(149, 165, 166, 0.1);
+  color: #95a5a6;
+}
+
+.memory-item-actions .cancel-btn:hover {
+  background: rgba(149, 165, 166, 0.2);
+  transform: scale(1.1);
+}
+
+/* Memory Item Editing Inputs */
+.memory-item .edit-input {
+  width: 100%;
+  background: white;
+  border: 2px solid var(--primary);
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-dark);
+  margin-bottom: var(--spacing-xs);
+}
+
+.memory-item .edit-input:focus {
+  outline: none;
+  border-color: var(--pink);
+  box-shadow: 0 0 0 2px rgba(232, 197, 193, 0.3);
+}
+
+.memory-item .edit-textarea {
+  width: 100%;
+  background: white;
+  border: 2px solid var(--primary);
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 1rem;
+  font-weight: 500;
+  color: var(--text-dark);
+  resize: vertical;
+  min-height: 60px;
+  font-family: inherit;
+  line-height: 1.4;
+}
+
+.memory-item .edit-textarea:focus {
+  outline: none;
+  border-color: var(--pink);
+  box-shadow: 0 0 0 2px rgba(232, 197, 193, 0.3);
+}
+
+/* Enhanced Memory Item Layout for Editing */
+.memory-item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-md);
+  background: linear-gradient(135deg, var(--card-bg) 0%, white 100%);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  border-left: 4px solid var(--tertiary);
+  transition: all var(--transition-normal);
+  box-shadow: 0 2px 8px rgba(138, 122, 107, 0.08);
+}
+
+.memory-item:hover {
+  background: linear-gradient(135deg, var(--pink-light) 0%, var(--card-bg) 100%);
+  border-left-color: var(--pink);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(138, 122, 107, 0.15);
+}
+
+/* Memory Item being edited gets special styling */
+.memory-item.editing {
+  background: linear-gradient(135deg, rgba(52, 152, 219, 0.05) 0%, white 100%);
+  border-left-color: #3498db;
+  border-width: 2px;
+}
+
+/* Memory Item Content Container */
+.memory-item-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+/* Responsive Design for Memory Actions */
+@media (max-width: 768px) {
+  .memory-item {
+    flex-direction: column;
+    gap: var(--spacing-sm);
+  }
+  
+  .memory-item-actions {
+    align-self: flex-end;
+    margin-left: 0;
+    margin-top: var(--spacing-xs);
+  }
+  
+  .memory-item .edit-textarea {
+    min-height: 80px;
+  }
+  
+  .memory-item-actions .edit-btn,
+  .memory-item-actions .delete-btn,
+  .memory-item-actions .save-btn,
+  .memory-item-actions .cancel-btn {
+    min-width: 36px;
+    height: 36px;
+    font-size: 1.2rem;
+  }
+}
+
+/* Special styling for memory items with long content */
+.memory-item-value {
+  word-wrap: break-word;
+  white-space: pre-wrap;
+  max-width: 100%;
+  overflow-wrap: break-word;
+}
+
+/* Editing state indicator */
+.memory-item.editing .memory-item-icon {
+  color: #3498db;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0% { opacity: 1; }
+  50% { opacity: 0.6; }
+  100% { opacity: 1; }
+}
 /* ===== HEADER SECTION ENHANCEMENTS ===== */
 /* Keep your existing .header styles and add these */
 /*https://i.pinimg.com/736x/0a/f9/39/0af939dfe16d696854629eb0bf9d478b.jpghttps://images.unsplash.com/photo-1589730880765-6adf993bb581?q=80&w=2940&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D
