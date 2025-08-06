@@ -747,11 +747,64 @@ const ContentDisplay = ({
                   </div>
                 ) : (
                   <div className="memory-items">
-                    {category.items.map((item, index) => (
-                      <div key={index} className="memory-item">
-                        {typeof item === 'string' ? item : item.text || item.information || 'Stored information'}
-                      </div>
-                    ))}
+                    {category.items.map((item, index) => {
+                      // STEP 1: Determine what content to show
+                      let displayContent;
+                      let displayLabel;
+                      
+                      if (typeof item === 'string') {
+                        // CASE 1: Simple string item
+                        displayContent = item;
+                        displayLabel = null;
+                      } else if (item && typeof item === 'object') {
+                        // CASE 2: Object with structured data
+                        
+                        // Extract the label (what this memory is about)
+                        displayLabel = item.key || item.memoryKey || item.label || item.name;
+                        
+                        // Extract the content (the actual information)
+                        displayContent = item.value || 
+                                       item.memoryValue || 
+                                       item.content || 
+                                       item.text || 
+                                       item.information ||
+                                       item.data ||
+                                       'Stored information';
+                        
+                        // If content is an object, stringify it nicely
+                        if (typeof displayContent === 'object') {
+                          displayContent = JSON.stringify(displayContent, null, 2);
+                        }
+                      } else {
+                        // CASE 3: Fallback for unexpected data
+                        displayContent = 'Stored information';
+                        displayLabel = null;
+                      }
+                      
+                      return (
+                        <div key={index} className="memory-item">
+                          <div className="memory-item-icon">💭</div>
+                          <div className="memory-item-content">
+                            {/* STEP 2: Show label if it exists and is different from content */}
+                            {displayLabel && displayLabel !== displayContent && (
+                              <div className="memory-item-label">
+                                <strong>{displayLabel}:</strong>
+                              </div>
+                            )}
+                            {/* STEP 3: Always show the actual content */}
+                            <div className="memory-item-value">
+                              {displayContent}
+                            </div>
+                            {/* STEP 4: Show metadata if available */}
+                            {item && typeof item === 'object' && item.created && (
+                              <div className="memory-item-meta">
+                                Stored {formatDate(item.created)}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </CollapsibleSection>
