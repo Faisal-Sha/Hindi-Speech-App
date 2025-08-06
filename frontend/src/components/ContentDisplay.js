@@ -66,23 +66,76 @@ const ContentDisplay = ({
     
     try {
       const start = new Date(startTime);
-      const end = endTime ? new Date(endTime) : null;
       
-      if (isNaN(start.getTime())) return 'Invalid time';
-      
-      const dateStr = start.toLocaleDateString();
-      const timeStr = start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      
-      if (end && !isNaN(end.getTime())) {
-        const endTimeStr = end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        return `${dateStr} ${timeStr} - ${endTimeStr}`;
+      // Check if start time is valid
+      if (isNaN(start.getTime())) {
+        console.warn('Invalid start time:', startTime);
+        return 'Invalid start time';
       }
       
-      return `${dateStr} ${timeStr}`;
+      // Format options for better readability
+      const dateOptions = { 
+        weekday: 'short', 
+        year: 'numeric', 
+        month: 'short', 
+        day: 'numeric' 
+      };
+      const timeOptions = { 
+        hour: '2-digit', 
+        minute: '2-digit',
+        hour12: true 
+      };
+      
+      // Handle case with no end time
+      if (!endTime) {
+        const startDate = start.toLocaleDateString('en-US', dateOptions);
+        const startTimeStr = start.toLocaleTimeString('en-US', timeOptions);
+        return `${startDate} at ${startTimeStr}`;
+      }
+      
+      // Handle case with end time
+      const end = new Date(endTime);
+      if (isNaN(end.getTime())) {
+        console.warn('Invalid end time:', endTime);
+        // Just show start time if end time is invalid
+        const startDate = start.toLocaleDateString('en-US', dateOptions);
+        const startTimeStr = start.toLocaleTimeString('en-US', timeOptions);
+        return `${startDate} at ${startTimeStr}`;
+      }
+      
+      const startDate = start.toLocaleDateString('en-US', dateOptions);
+      const endDate = end.toLocaleDateString('en-US', dateOptions);
+      const startTimeStr = start.toLocaleTimeString('en-US', timeOptions);
+      const endTimeStr = end.toLocaleTimeString('en-US', timeOptions);
+      
+      // Same day event
+      if (startDate === endDate) {
+        return `${startDate}: ${startTimeStr} → ${endTimeStr}`;
+      }
+      
+      // Multi-day event - show both dates
+      return `${startDate} at ${startTimeStr} → ${endDate} at ${endTimeStr}`;
+      
     } catch (error) {
-      console.warn('Error formatting event time:', startTime, error);
-      return 'Invalid time';
+      console.error('Error formatting event time:', { startTime, endTime, error });
+      return 'Invalid time format';
     }
+  };
+
+  const getEventStartTime = (event) => {
+    return event.startTime || event.start_time;
+  };
+  
+  const getEventEndTime = (event) => {
+    return event.endTime || event.end_time;
+  };
+  
+  const getEventTitle = (event) => {
+    return event.title || event.event_title || 'Untitled Event';
+  };
+  
+  const getEventDescription = (event) => {
+    return event.description || event.event_description;
   };
 
   const formatDateTimeForInput = (dateTime) => {
@@ -102,6 +155,30 @@ const ContentDisplay = ({
     } catch (error) {
       console.warn('Error formatting datetime for input:', dateTime, error);
       return '';
+    }
+  };
+
+  const convertLocalDateTimeToISO = (localDateTime) => {
+    if (!localDateTime) return null;
+    
+    try {
+      // Parse the datetime-local value manually to preserve local time
+      const [datePart, timePart] = localDateTime.split('T');
+      const [year, month, day] = datePart.split('-').map(Number);
+      const [hours, minutes] = timePart.split(':').map(Number);
+      
+      // Create the ISO string preserving the user's intended local time
+      const isoYear = year;
+      const isoMonth = String(month).padStart(2, '0');
+      const isoDay = String(day).padStart(2, '0');
+      const isoHours = String(hours).padStart(2, '0');
+      const isoMinutes = String(minutes).padStart(2, '0');
+      
+      return `${isoYear}-${isoMonth}-${isoDay}T${isoHours}:${isoMinutes}:00.000Z`;
+      
+    } catch (error) {
+      console.error('Error converting local datetime to ISO:', localDateTime, error);
+      return null;
     }
   };
 
@@ -226,12 +303,11 @@ const ContentDisplay = ({
       isEditingRef.current = true;
       setEditingEvent({ scheduleName, eventId: event.id });
       
-      // Prepare the edit data with all current event properties
       const editData = {
-        title: event.title || event.event_title || '',
-        description: event.description || event.event_description || '',
-        startTime: formatDateTimeForInput(event.startTime || event.start_time),
-        endTime: formatDateTimeForInput(event.endTime || event.end_time),
+        title: getEventTitle(event),
+        description: getEventDescription(event),
+        startTime: formatDateTimeForInput(getEventStartTime(event)),
+        endTime: formatDateTimeForInput(getEventEndTime(event)),
         location: event.location || ''
       };
       
@@ -245,35 +321,53 @@ const ContentDisplay = ({
         console.warn('onEditEvent handler not provided or no event being edited');
         return;
       }
-  
+    
       try {
         console.log(`📝 Saving edited event: ${editingEvent.eventId}`);
-        console.log(`📝 Event updates:`, editEventData);
+        console.log(`📝 Raw edit data:`, editEventData);
         
-        // Prepare updates - only include fields that have values
+        // Prepare updates with proper timezone handling
         const updates = {};
         
-        if (editEventData.title.trim()) {
+        // Always include title if it exists
+        if (editEventData.title !== undefined) {
           updates.title = editEventData.title.trim();
         }
         
-        if (editEventData.description.trim()) {
+        // Include description (allow empty string to clear it)
+        if (editEventData.description !== undefined) {
           updates.description = editEventData.description.trim();
         }
         
+        // FIXED: Handle start time with proper timezone conversion
         if (editEventData.startTime) {
-          updates.startTime = new Date(editEventData.startTime).toISOString();
+          const startTimeISO = convertLocalDateTimeToISO(editEventData.startTime);
+          if (startTimeISO) {
+            updates.startTime = startTimeISO;
+            console.log(`📅 Converted start time: ${editEventData.startTime} → ${startTimeISO}`);
+          }
         }
         
-        if (editEventData.endTime) {
-          updates.endTime = new Date(editEventData.endTime).toISOString();
+        // FIXED: Handle end time with proper timezone conversion
+        if (editEventData.endTime !== undefined) {
+          if (editEventData.endTime.trim() === '') {
+            updates.endTime = null; // Clear the end time
+            console.log(`📅 Clearing end time`);
+          } else {
+            const endTimeISO = convertLocalDateTimeToISO(editEventData.endTime);
+            if (endTimeISO) {
+              updates.endTime = endTimeISO;
+              console.log(`📅 Converted end time: ${editEventData.endTime} → ${endTimeISO}`);
+            }
+          }
         }
         
-        if (editEventData.location.trim()) {
+        // Include location (allow empty string to clear it)
+        if (editEventData.location !== undefined) {
           updates.location = editEventData.location.trim();
         }
         
-        console.log(`📝 Prepared updates:`, updates);
+        console.log(`📝 Final prepared updates:`, updates);
         
         // Call the edit handler
         await onEditEvent({
@@ -515,7 +609,7 @@ const ContentDisplay = ({
                       return (
                         <div key={event.id || index} className="schedule-item">
                           {isEditingThisEvent ? (
-                            // FIXED: Edit mode with proper event handlers
+                            // Edit mode with proper event handlers
                             <div className="edit-event-form">
                               <input
                                 type="text"
@@ -558,31 +652,38 @@ const ContentDisplay = ({
                               />
                               
                               <div className="edit-event-actions">
-                                <button onClick={saveEditedEvent} className="save-btn">✅ Save</button>
-                                <button onClick={cancelEditingEvent} className="cancel-btn">❌ Cancel</button>
+                                <button onClick={saveEditedEvent} className="save-btn">
+                                  💾 Save
+                                </button>
+                                <button onClick={cancelEditingEvent} className="cancel-btn">
+                                  ❌ Cancel
+                                </button>
                               </div>
                             </div>
                           ) : (
-                            // Display mode for events
+                            // IMPROVED: View mode with better field handling
                             <>
                               <div className="schedule-item-main">
                                 <div className="schedule-item-title">
-                                  {event.title || event.event_title || 'Untitled Event'}
+                                  {getEventTitle(event)}
                                 </div>
                                 
+                                {/* FIXED: Always show time if available, using improved formatting */}
                                 <div className="schedule-item-time">
-                                  📅 {formatEventTime(event.startTime || event.start_time, event.endTime || event.end_time)}
+                                  📅 {formatEventTime(getEventStartTime(event), getEventEndTime(event))}
                                 </div>
                                 
-                                {(event.location) && (
+                                {/* FIXED: Show location if it exists */}
+                                {event.location && (
                                   <div className="schedule-item-location">
                                     📍 {event.location}
                                   </div>
                                 )}
                                 
-                                {(event.description || event.event_description) && (
+                                {/* FIXED: Show description if it exists */}
+                                {getEventDescription(event) && (
                                   <div className="schedule-item-description">
-                                    {event.description || event.event_description}
+                                    {getEventDescription(event)}
                                   </div>
                                 )}
                               </div>
@@ -679,6 +780,7 @@ const ContentDisplay = ({
     case 'memory':
       return renderMemoryContent();
     case 'chat':
+      return renderChatContent();
     default:
       return (
         <div className="chat-content">
