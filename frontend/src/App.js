@@ -388,88 +388,80 @@ const handleDeleteMemory = async (action) => {
     }
   };
 
-  const saveDataChanges = async (actions) => {
-    try {
-      if (!currentUser || !actions.length) {
-        console.log('⚠️ No user or no actions to save');
-        return;
-      }
-      
-      console.log('💾 Saving data changes...');
-      console.log('👤 User:', currentUser.user_id);
-      console.log('📋 Actions:', actions);
-      
-      actions.forEach((action, index) => {
-        console.log(`📋 [DEBUG] Action ${index + 1}:`, {
-          type: action.type,
-          data: action.data,
-          dataType: typeof action.data,
-          dataKeys: action.data ? Object.keys(action.data) : 'no data'
-        });
-      });
-
-      
-      const response = await fetch('http://localhost:3001/save-data-enhanced', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId: currentUser.user_id,
-          actions: actions
-        })
-      });
-  
-      if (response.ok) {
-        const result = await response.json();
-        console.log(`✅ Data save complete: ${result.successful}/${result.processed} actions successful`);
-        
-        // FIXED: Safe handling of failed actions to prevent "malformed array literal" error
-        if (result.failed && result.failed > 0) {
-          console.warn(`⚠️ ${result.failed} actions failed`);
-          
-          // SAFE: Check if results exist and has failed items before filtering
-          if (result.results && Array.isArray(result.results)) {
-            const failedActions = result.results.filter(r => !r.success);
-            
-            // SAFE: Log each failed action separately to avoid array literal issues
-            failedActions.forEach((failedAction, index) => {
-              console.warn(`❌ Failed action ${index + 1}:`, {
-                type: failedAction.type || 'unknown',
-                error: failedAction.error || 'no error message',
-                // Don't include the full action data to avoid circular references
-              });
-            });
-          }
-        }
-        
-        // Reload user data to ensure frontend is in sync with backend
+  const handleIntelligentResponse = async (responseData) => {
+    // AI already executed everything on backend!
+    console.log('🤖 AI Response:', responseData.response);
+    
+    if (responseData.operations?.length > 0) {
+        console.log(`✅ AI executed ${responseData.operations.length} operations`);
+        // Refresh UI data
         await loadUserData(currentUser.user_id);
-        
-      } else {
-        const errorText = await response.text();
-        console.error('❌ Failed to save data changes. Response:', errorText);
-      }
-    } catch (error) {
-      console.error('❌ Error saving data changes:', error);
-      
-      // SAFE: Log error details without causing additional errors
-      console.error('❌ Error details:', {
-        message: error.message,
-        name: error.name,
-        // Don't log the full error object to avoid circular references
-      });
     }
-  };
+    
+    if (responseData.dataAnalysis) {
+        console.log('📊 AI Analysis:', responseData.dataAnalysis);
+        // Optionally show insights to user
+    }
+};
 
   // =====================================
   // INPUT HANDLING
   // =====================================
   
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (inputText.trim()) {
-      sendMessage(inputText);
+    if (!inputText.trim() || isAILoading) return;
+
+    const userMessage = {
+        type: 'user',
+        text: inputText.trim(),
+        timestamp: new Date(),
+        user: currentUser?.display_name
+    };
+
+    setMessages(prev => [...prev, userMessage]);
+    setIsAILoading(true);
+    setInputText('');
+
+    try {
+        const response = await fetch('http://localhost:3001/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                message: userMessage.text,
+                mode: currentMode,
+                language: currentUser.preferred_language,
+                userId: currentUser.user_id
+            })
+        });
+
+        if (response.ok) {
+            const responseData = await response.json();
+            console.log(`📥 Intelligent AI Response:`, responseData);
+
+            // Add AI response to conversation
+            const aiMessage = {
+                type: 'ai',
+                text: responseData.response,
+                timestamp: new Date(),
+                intelligentProcessing: responseData.intelligentProcessing
+            };
+
+            setMessages(prev => [...prev, aiMessage]);
+
+            // Handle intelligent response (AI already executed operations!)
+            await handleIntelligentResponse(responseData);
+            
+        } else {
+            throw new Error('Failed to get AI response');
+        }
+    } catch (error) {
+        console.error('❌ Error:', error);
+        // Handle error...
+    } finally {
+        setIsAILoading(false);
     }
-  };
+};
 
   const handleSpeechSubmit = () => {
     if (accumulatedText.trim()) {

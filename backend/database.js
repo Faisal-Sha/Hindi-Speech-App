@@ -1081,39 +1081,63 @@ async function addMemoryItem(userId, categoryName, memoryKey, memoryValue, optio
       
       console.log('🔍 [DEEP DEBUG] Found categories:', categoriesResult.rows);
 
-      if (categoriesResult.rows.length === 0) {
-          throw new Error(`No memory categories exist. Please create a category first.`);
-      }
-
-      // Find matching category
       let targetCategoryId = null;
       let targetCategoryName = null;
 
-      const exactMatch = categoriesResult.rows.find(cat => 
-          cat.category_name.toLowerCase() === categoryName.toLowerCase()
-      );
-
-      if (exactMatch) {
-          targetCategoryId = exactMatch.id;
-          targetCategoryName = exactMatch.category_name;
-          console.log('🔍 [DEEP DEBUG] Found exact match:', { targetCategoryId, targetCategoryName });
+      if (categoriesResult.rows.length === 0) {
+          // NO CATEGORIES EXIST - CREATE THE REQUESTED ONE AUTOMATICALLY
+          console.log(`🔍 [DEEP DEBUG] No categories exist - auto-creating "${categoryName}"`);
+          
+          const createResult = await pool.query(`
+              INSERT INTO memory_categories (user_id, category_name, category_type, created_at, updated_at)
+              VALUES ($1, $2, 'general', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+              RETURNING id, category_name
+          `, [userId, categoryName]);
+          
+          targetCategoryId = createResult.rows[0].id;
+          targetCategoryName = createResult.rows[0].category_name;
+          console.log(`✅ Auto-created category: "${targetCategoryName}" with ID: ${targetCategoryId}`);
+          
       } else {
-          console.log('🔍 [DEEP DEBUG] No exact match, trying partial...');
-          const partialMatch = categoriesResult.rows.find(cat => 
-              cat.category_name.toLowerCase().includes(categoryName.toLowerCase()) ||
-              categoryName.toLowerCase().includes(cat.category_name.toLowerCase())
+          // CATEGORIES EXIST - TRY TO FIND A MATCH
+          console.log('🔍 [DEEP DEBUG] Categories exist - looking for match...');
+          
+          // Try exact match first
+          const exactMatch = categoriesResult.rows.find(cat => 
+              cat.category_name.toLowerCase() === categoryName.toLowerCase()
           );
 
-          if (partialMatch) {
-              targetCategoryId = partialMatch.id;
-              targetCategoryName = partialMatch.category_name;
-              console.log('🔍 [DEEP DEBUG] Found partial match:', { targetCategoryId, targetCategoryName });
-          }
-      }
+          if (exactMatch) {
+              targetCategoryId = exactMatch.id;
+              targetCategoryName = exactMatch.category_name;
+              console.log('🔍 [DEEP DEBUG] Found exact match:', { targetCategoryId, targetCategoryName });
+          } else {
+              // Try partial match
+              console.log('🔍 [DEEP DEBUG] No exact match, trying partial...');
+              const partialMatch = categoriesResult.rows.find(cat => 
+                  cat.category_name.toLowerCase().includes(categoryName.toLowerCase()) ||
+                  categoryName.toLowerCase().includes(cat.category_name.toLowerCase())
+              );
 
-      if (!targetCategoryId) {
-          const availableCategories = categoriesResult.rows.map(cat => cat.category_name).join(', ');
-          throw new Error(`Category "${categoryName}" not found. Available categories: ${availableCategories}`);
+              if (partialMatch) {
+                  targetCategoryId = partialMatch.id;
+                  targetCategoryName = partialMatch.category_name;
+                  console.log('🔍 [DEEP DEBUG] Found partial match:', { targetCategoryId, targetCategoryName });
+              } else {
+                  // NO MATCH FOUND - CREATE NEW CATEGORY AUTOMATICALLY (LIKE LISTS DO!)
+                  console.log(`🔍 [DEEP DEBUG] No matches found - auto-creating "${categoryName}"`);
+                  
+                  const createResult = await pool.query(`
+                      INSERT INTO memory_categories (user_id, category_name, category_type, created_at, updated_at)
+                      VALUES ($1, $2, 'general', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                      RETURNING id, category_name
+                  `, [userId, categoryName]);
+                  
+                  targetCategoryId = createResult.rows[0].id;
+                  targetCategoryName = createResult.rows[0].category_name;
+                  console.log(`✅ Auto-created new category: "${targetCategoryName}" with ID: ${targetCategoryId}`);
+              }
+          }
       }
 
       console.log('🔍 [DEEP DEBUG] Step 2: Preparing SQL query...');
@@ -1121,8 +1145,6 @@ async function addMemoryItem(userId, categoryName, memoryKey, memoryValue, optio
       // FIXED: Use array format for PostgreSQL tags column
       const queryParams = [targetCategoryId, memoryKey, memoryValue, memory_type, importance, tagsArray, expires_at, is_private];
       console.log('🔍 [DEEP DEBUG] Query parameters:', queryParams);
-      console.log('🔍 [DEEP DEBUG] Parameter types:', queryParams.map(p => typeof p));
-      console.log('🔍 [DEEP DEBUG] Tags parameter:', tagsArray, 'Is Array:', Array.isArray(tagsArray));
       
       const sqlQuery = `
           INSERT INTO memory_items (category_id, memory_key, memory_value, memory_type, importance, tags, expires_at, is_private)
@@ -1134,9 +1156,7 @@ async function addMemoryItem(userId, categoryName, memoryKey, memoryValue, optio
           RETURNING *
       `;
       
-      console.log('🔍 [DEEP DEBUG] SQL Query:', sqlQuery);
       console.log('🔍 [DEEP DEBUG] Step 3: Executing query...');
-      
       const result = await pool.query(sqlQuery, queryParams);
       
       console.log('🔍 [DEEP DEBUG] Query executed successfully');
@@ -1150,8 +1170,6 @@ async function addMemoryItem(userId, categoryName, memoryKey, memoryValue, optio
       console.error('🔍 [DEEP DEBUG] Error message:', error.message);
       console.error('🔍 [DEEP DEBUG] Error code:', error.code);
       console.error('🔍 [DEEP DEBUG] Error detail:', error.detail);
-      console.error('🔍 [DEEP DEBUG] Error hint:', error.hint);
-      console.error('🔍 [DEEP DEBUG] Error position:', error.position);
       throw error;
   }
 }
