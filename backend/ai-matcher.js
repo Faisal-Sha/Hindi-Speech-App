@@ -302,3 +302,5 @@ class AISmartMatcher {
       return 'New List';
     }
 }
+
+module.exports = { AISmartMatcher };

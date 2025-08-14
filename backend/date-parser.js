@@ -56,4 +56,6 @@ class SmartDateParser {
       });
     }
 }
+
+module.exports = { SmartDateParser };
   

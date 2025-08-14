@@ -1,3 +1,4 @@
+// backend/action-processor.js
 const { AISmartMatcher } = require('./ai-matcher');
 const { SmartDateParser } = require('./date-parser');
 
@@ -41,7 +42,10 @@ class EnhancedSmartActionProcessor {
             return await this.handleSmartRemember(data, userId);
             
           case 'query_data':
-            return await this.handleDataQuery(data, userId);
+          case 'count_events':
+          case 'list_items':
+          case 'memory_search':
+            return await this.handleDataQuery(data || action, userId);
             
           default:
             // Fallback to legacy action handling for backward compatibility
@@ -149,33 +153,25 @@ class EnhancedSmartActionProcessor {
     async handleSmartAdd(data, userId) {
       const { target, operation, values, metadata } = data;
       
-      console.log(`➕ Enhanced smart adding to: "${target}"`);
+      console.log(`➕ Smart adding to: "${target}"`);
       
       switch(operation) {
         case 'add_to_list':
           const allLists = await this.db.getUserLists(userId);
-          
-          // Let AI find the best match
-          const targetList = await this.aiMatcher.findBestListMatch(target, allLists, values);
+          const targetList = await this.aiMatcher.findBestListMatch(target, allLists);
           
           if (!targetList) {
-            // AI decided we should create a new list
-            console.log('🤖 AI suggests creating new list');
-            
-            const newListResult = await this.handleSmartCreate({
+            // AI couldn't find a match - maybe create new list?
+            return await this.handleSmartCreate({
               target,
               operation: 'create_list',
               values
             }, userId);
-            
-            return newListResult;
           }
           
-          // Add items to the AI-chosen list
-          const results = [];
+          // Add items to matched list
           for (const item of values) {
-            const result = await this.db.addItemToList(userId, targetList, item);
-            results.push(result);
+            await this.db.addItemToList(userId, targetList, item);
           }
           
           return {
@@ -192,98 +188,60 @@ class EnhancedSmartActionProcessor {
           
         case 'add_event':
           const allSchedules = await this.db.getUserSchedules(userId);
+          const targetSchedule = await this.aiMatcher.findBestScheduleMatch(target, allSchedules);
           
-          // Let AI find the best schedule
-          const scheduleTarget = await this.aiMatcher.findBestScheduleMatch(target, allSchedules);
-          
-          if (!scheduleTarget) {
-            // Create new schedule
-            const newScheduleResult = await this.handleSmartCreate({
+          if (!targetSchedule) {
+            // Create new schedule if none found
+            return await this.handleSmartCreate({
               target,
-              operation: 'create_schedule'
+              operation: 'create_schedule',
+              values
             }, userId);
-            
-            // Then add the event
-            const eventDetails = this.parseEventDetails(values[0], metadata);
-            await this.db.addEventToSchedule(userId, newScheduleResult.details.name, eventDetails.title, eventDetails);
-            
-            return {
-              success: true,
-              type: 'schedule_created_and_event_added',
-              details: {
-                schedule: newScheduleResult.details.name,
-                event: eventDetails,
-                aiDecision: true
-              }
-            };
           }
           
-          const eventDetails = this.parseEventDetails(values[0], metadata);
-          const eventResult = await this.db.addEventToSchedule(
-            userId, 
-            scheduleTarget, 
-            eventDetails.title,
-            eventDetails
-          );
+          // Add event to matched schedule
+          for (const event of values) {
+            const eventDetails = this.parseEventDetails(event, metadata);
+            await this.db.addEventToSchedule(userId, targetSchedule, eventDetails);
+          }
           
           return {
             success: true,
-            type: 'event_added',
+            type: 'events_added',
             details: {
-              schedule: scheduleTarget,
-              event: eventDetails,
+              targetSchedule,
+              originalRequest: target,
+              eventsAdded: values.length,
               aiDecision: true
             }
           };
           
         case 'store_memory':
           const allMemory = await this.db.getUserMemories(userId);
+          const targetCategory = await this.aiMatcher.findBestMemoryMatch(target, allMemory);
           
-          // Let AI find the best memory category
-          const memoryTarget = await this.aiMatcher.findBestMemoryMatch(target, allMemory, values);
-          
-          if (!memoryTarget) {
+          if (!targetCategory) {
             // Create new memory category
-            const newMemoryResult = await this.handleSmartCreate({
+            return await this.handleSmartCreate({
               target,
-              operation: 'create_memory'
+              operation: 'create_memory',
+              values
             }, userId);
-            
-            // Then store the memory items
-            const memoryResults = [];
-            for (const item of values) {
-              const { key, value } = this.parseMemoryItem(item);
-              const result = await this.db.addMemoryItem(userId, newMemoryResult.details.category, key, value);
-              memoryResults.push(result);
-            }
-            
-            return {
-              success: true,
-              type: 'memory_category_created_and_items_stored',
-              details: {
-                category: newMemoryResult.details.category,
-                itemsStored: values.length,
-                items: values,
-                aiDecision: true
-              }
-            };
           }
           
-          // Store memory items in AI-matched category
-          const memoryResults = [];
+          // Add memory items
           for (const item of values) {
-            const { key, value } = this.parseMemoryItem(item);
-            const result = await this.db.addMemoryItem(userId, memoryTarget, key, value);
-            memoryResults.push(result);
+            const memoryItem = this.parseMemoryItem(item);
+            await this.db.addMemoryItem(userId, targetCategory, memoryItem);
           }
           
           return {
             success: true,
             type: 'memory_stored',
             details: {
-              category: memoryTarget,
+              targetCategory,
+              originalRequest: target,
               itemsStored: values.length,
-              items: values,
               aiDecision: true
             }
           };
@@ -294,27 +252,142 @@ class EnhancedSmartActionProcessor {
     }
   
     /**
-     * Handle smart updates
+     * Handle smart updates with AI matching and context understanding
      */
     async handleSmartUpdate(data, userId) {
       const { target, operation, values, metadata } = data;
       
-      console.log(`🔄 Smart updating: "${target}"`);
+      console.log(`🔄 Smart updating: "${target}" with operation: ${operation}`);
       
-      // This would handle intelligent updates
-      // For now, maintain existing functionality
-      return { 
-        success: true, 
-        type: 'update_processed',
-        details: { target, operation }
-      };
+      switch(operation) {
+        case 'prepare_edit':
+          // Just acknowledge that we're ready to edit - no actual changes yet
+          return {
+            success: true,
+            type: 'edit_prepared',
+            details: {
+              target,
+              message: 'Ready to edit. What changes would you like to make?'
+            }
+          };
+          
+        case 'edit_list':
+        case 'update_list':
+          const allLists = await this.db.getUserLists(userId);
+          const targetList = await this.aiMatcher.findBestListMatch(target, allLists);
+          
+          if (!targetList) {
+            return { 
+              success: false, 
+              error: `Could not find list matching "${target}"` 
+            };
+          }
+          
+          // Handle different types of list updates
+          if (values && values.length > 0) {
+            // Add new items to the list
+            for (const item of values) {
+              await this.db.addItemToList(userId, targetList, item);
+            }
+          }
+          
+          if (metadata?.removeItems) {
+            // Remove specified items
+            for (const itemToRemove of metadata.removeItems) {
+              // Find and remove matching items (this would need to be implemented in database functions)
+              console.log(`Removing item: ${itemToRemove} from ${targetList}`);
+              // You would implement item removal by text matching here
+            }
+          }
+          
+          if (metadata?.markCompleted) {
+            // Mark items as completed
+            for (const itemToComplete of metadata.markCompleted) {
+              console.log(`Marking completed: ${itemToComplete} in ${targetList}`);
+              // You would implement item completion here
+            }
+          }
+          
+          return {
+            success: true,
+            type: 'list_updated',
+            details: {
+              targetList,
+              originalRequest: target,
+              itemsAdded: values?.length || 0,
+              itemsRemoved: metadata?.removeItems?.length || 0,
+              itemsCompleted: metadata?.markCompleted?.length || 0,
+              aiDecision: true
+            }
+          };
+          
+        case 'edit_event':
+        case 'update_event':
+          const allSchedules = await this.db.getUserSchedules(userId);
+          const targetSchedule = await this.aiMatcher.findBestScheduleMatch(target, allSchedules);
+          
+          if (!targetSchedule) {
+            return { 
+              success: false, 
+              error: `Could not find schedule matching "${target}"` 
+            };
+          }
+          
+          // Handle event updates (this would need more sophisticated event matching)
+          if (metadata?.eventId && metadata?.updates) {
+            await this.db.updateEvent(userId, targetSchedule, metadata.eventId, metadata.updates);
+          }
+          
+          return {
+            success: true,
+            type: 'event_updated',
+            details: {
+              targetSchedule,
+              originalRequest: target,
+              aiDecision: true
+            }
+          };
+          
+        case 'edit_memory':
+        case 'update_memory':
+          const allMemory = await this.db.getUserMemories(userId);
+          const targetCategory = await this.aiMatcher.findBestMemoryMatch(target, allMemory);
+          
+          if (!targetCategory) {
+            return { 
+              success: false, 
+              error: `Could not find memory category matching "${target}"` 
+            };
+          }
+          
+          // Handle memory updates
+          if (metadata?.itemId && metadata?.updates) {
+            await this.db.updateMemoryItem(userId, targetCategory, metadata.itemId, metadata.updates);
+          }
+          
+          return {
+            success: true,
+            type: 'memory_updated',
+            details: {
+              targetCategory,
+              originalRequest: target,
+              aiDecision: true
+            }
+          };
+          
+        default:
+          return {
+            success: false,
+            error: `Unknown update operation: ${operation}`
+          };
+      }
     }
   
     /**
-     * Handle smart deletion
+     * Handle smart deletion with AI matching
      */
     async handleSmartDelete(data, userId) {
-      const { target, operation } = data;
+      const { target, operation, metadata } = data;
       
       console.log(`🗑️ Smart deleting: "${target}"`);
       
@@ -329,6 +402,36 @@ class EnhancedSmartActionProcessor {
             success: true, 
             type: 'list_deleted', 
             details: { listName: listToDelete, aiDecision: true }
+          };
+        }
+      }
+      
+      if (operation === 'delete_schedule') {
+        const allSchedules = await this.db.getUserSchedules(userId);
+        const scheduleToDelete = await this.aiMatcher.findBestScheduleMatch(target, allSchedules);
+        
+        if (scheduleToDelete) {
+          await this.db.deleteUserSchedule(userId, scheduleToDelete);
+          
+          return { 
+            success: true, 
+            type: 'schedule_deleted', 
+            details: { scheduleName: scheduleToDelete, aiDecision: true }
+          };
+        }
+      }
+      
+      if (operation === 'delete_memory') {
+        const allMemory = await this.db.getUserMemories(userId);
+        const memoryToDelete = await this.aiMatcher.findBestMemoryMatch(target, allMemory);
+        
+        if (memoryToDelete) {
+          await this.db.deleteMemoryCategory(userId, memoryToDelete);
+          
+          return { 
+            success: true, 
+            type: 'memory_deleted', 
+            details: { categoryName: memoryToDelete, aiDecision: true }
           };
         }
       }
@@ -374,17 +477,229 @@ class EnhancedSmartActionProcessor {
      * Handle data queries (counting, searching, etc.)
      */
     async handleDataQuery(data, userId) {
-      const { target, operation, values, metadata } = data;
+      const { target, operation, parameters, type } = data;
       
-      console.log(`🔍 Handling data query: ${operation} for ${target}`);
+      console.log(`🔍 Handling data query: ${operation || type}`);
       
-      // This would delegate to the EnhancedQueryHandler
-      // For now, return a placeholder
-      return {
-        success: true,
-        type: 'query_processed',
-        details: { target, operation }
+      switch(type || operation) {
+        case 'count_events':
+          return await this.handleEventCount(userId, parameters);
+          
+        case 'list_items':
+          return await this.handleListQuery(userId, parameters);
+          
+        case 'memory_search':
+          return await this.handleMemoryQuery(userId, parameters);
+          
+        default:
+          return {
+            success: true,
+            type: 'query_processed',
+            details: { target, operation: operation || type }
+          };
+      }
+    }
+    
+    /**
+     * Handle event counting queries
+     */
+    async handleEventCount(userId, parameters) {
+      try {
+        const allSchedules = await this.db.getUserSchedules(userId);
+        const scheduleNames = Object.keys(allSchedules);
+        
+        let totalEvents = 0;
+        let todayEvents = 0;
+        let upcomingEvents = 0;
+        const breakdown = {};
+        
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        
+        for (const scheduleName of scheduleNames) {
+          const events = allSchedules[scheduleName].events || [];
+          const scheduleTotal = events.length;
+          
+          let scheduleToday = 0;
+          let scheduleUpcoming = 0;
+          
+          for (const event of events) {
+            const eventDate = new Date(event.startTime || event.date);
+            eventDate.setHours(0, 0, 0, 0);
+            
+            if (eventDate.getTime() === today.getTime()) {
+              scheduleToday++;
+              todayEvents++;
+            } else if (eventDate > today) {
+              scheduleUpcoming++;
+              upcomingEvents++;
+            }
+          }
+          
+          totalEvents += scheduleTotal;
+          breakdown[scheduleName] = {
+            total: scheduleTotal,
+            today: scheduleToday,
+            upcoming: scheduleUpcoming
+          };
+        }
+        
+        const summary = `You have ${totalEvents} total events scheduled across ${scheduleNames.length} schedules.${
+          todayEvents > 0 ? ` ${todayEvents} events today.` : ''
+        }${
+          upcomingEvents > 0 ? ` ${upcomingEvents} upcoming events.` : ''
+        }`;
+        
+        return {
+          success: true,
+          type: 'event_count',
+          summary,
+          data: {
+            total: totalEvents,
+            today: todayEvents,
+            upcoming: upcomingEvents,
+            schedules: scheduleNames.length,
+            breakdown
+          }
+        };
+        
+      } catch (error) {
+        console.error('❌ Error counting events:', error);
+        return {
+          success: false,
+          error: 'Failed to count events'
+        };
+      }
+    }
+    
+    /**
+     * Handle list queries
+     */
+    async handleListQuery(userId, parameters) {
+      try {
+        const allLists = await this.db.getUserLists(userId);
+        const listNames = Object.keys(allLists);
+        
+        let totalItems = 0;
+        let completedItems = 0;
+        let pendingItems = 0;
+        const breakdown = {};
+        
+        for (const listName of listNames) {
+          const items = allLists[listName].items || [];
+          const listTotal = items.length;
+          
+          let listCompleted = 0;
+          let listPending = 0;
+          
+          for (const item of items) {
+            if (item.completed || item.status === 'completed') {
+              listCompleted++;
+              completedItems++;
+            } else {
+              listPending++;
+              pendingItems++;
+            }
+          }
+          
+          totalItems += listTotal;
+          breakdown[listName] = {
+            total: listTotal,
+            completed: listCompleted,
+            pending: listPending
+          };
+        }
+        
+        const summary = `You have ${totalItems} total items across ${listNames.length} lists.${
+          completedItems > 0 ? ` ${completedItems} completed.` : ''
+        }${
+          pendingItems > 0 ? ` ${pendingItems} pending.` : ''
+        }`;
+        
+        return {
+          success: true,
+          type: 'list_count',
+          summary,
+          data: {
+            total: totalItems,
+            completed: completedItems,
+            pending: pendingItems,
+            lists: listNames.length,
+            breakdown
+          }
+        };
+        
+      } catch (error) {
+        console.error('❌ Error querying lists:', error);
+        return {
+          success: false,
+          error: 'Failed to query lists'
+        };
+      }
+    }
+    
+    /**
+     * Handle memory queries
+     */
+    async handleMemoryQuery(userId, parameters) {
+      try {
+        const allMemory = await this.db.getUserMemories(userId);
+        const categoryNames = Object.keys(allMemory);
+        
+        let totalItems = 0;
+        const breakdown = {};
+        
+        for (const categoryName of categoryNames) {
+          const items = allMemory[categoryName].items || [];
+          const categoryTotal = items.length;
+          
+          totalItems += categoryTotal;
+          breakdown[categoryName] = {
+            total: categoryTotal,
+            items: items.map(item => item.key || item.name || 'Unnamed item')
+          };
+        }
+        
+        const summary = `You have ${totalItems} total memory items across ${categoryNames.length} categories.`;
+        
+        return {
+          success: true,
+          type: 'memory_count',
+          summary,
+          data: {
+            total: totalItems,
+            categories: categoryNames.length,
+            breakdown
+          }
+        };
+        
+      } catch (error) {
+        console.error('❌ Error querying memory:', error);
+        return {
+          success: false,
+          error: 'Failed to query memory'
+        };
+      }
+    }
+  
+    /**
+     * Parse event details with smart date parsing
+     */
+    parseEventDetails(eventString, metadata) {
+      const details = {
+        title: eventString,
+        startTime: null,
+        endTime: null,
+        description: '',
+        location: ''
       };
+      
+      // Use smart date parsing if available
+      if (metadata?.smartDate) {
+        details.startTime = this.dateParser.parseToActualDate(metadata.smartDate);
+      }
+      
+      return details;
     }
   
     /**
@@ -416,26 +731,6 @@ class EnhancedSmartActionProcessor {
         key: itemStr,
         value: ''
       };
-    }
-  
-    /**
-     * Parse event details with smart date parsing
-     */
-    parseEventDetails(eventString, metadata) {
-      const details = {
-        title: eventString,
-        startTime: null,
-        endTime: null,
-        description: '',
-        location: ''
-      };
-      
-      // Use smart date parsing if available
-      if (metadata?.smartDate) {
-        details.startTime = this.dateParser.parseToActualDate(metadata.smartDate);
-      }
-      
-      return details;
     }
   
     /**
@@ -497,3 +792,5 @@ class EnhancedSmartActionProcessor {
       }
     }
 }
+
+module.exports = { EnhancedSmartActionProcessor };

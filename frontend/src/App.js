@@ -1,3 +1,4 @@
+// frontend/src/App.js
 import React, { useState, useEffect } from 'react';
 import './App.css';
 
@@ -9,7 +10,9 @@ import useDataManagement from './hooks/useDataManagement';
 import useSpeechRecognition from './hooks/useSpeechRecognition';
 
 function App() {
-
+  // =====================================
+  // STATE MANAGEMENT
+  // =====================================
   const [currentUser, setCurrentUser] = useState(null);
   const [isSelectingUser, setIsSelectingUser] = useState(true);
   const [currentMode, setCurrentMode] = useState('chat');
@@ -18,16 +21,15 @@ function App() {
   const [isAILoading, setIsAILoading] = useState(false);
   const [showStatus, setShowStatus] = useState(false);
   
-  
   const currentLanguage = currentUser?.preferred_language || 'en-US';
   
-  
+  // Use your existing hooks
   const {
     userLists,
     userSchedules,
     userMemory,
     userChats,
-    handleAiActions,
+    handleAiActions, // ✅ Now this exists!
     isLoading: isDataLoading,
     loadUserData
   } = useDataManagement(messages);
@@ -40,7 +42,9 @@ function App() {
     clearText        
   } = useSpeechRecognition(currentLanguage);
 
-  
+  // =====================================
+  // USER MANAGEMENT
+  // =====================================
   
   // Load user data when user is selected
   useEffect(() => {
@@ -78,14 +82,14 @@ function App() {
       'de-DE': `Willkommen zurück, ${userProfile.display_name}! Wie kann ich Ihnen heute helfen?`
     };
     
-    const welcomeText = welcomeMessages[userProfile.preferred_language] || welcomeMessages['en-US'];
-    
-    setMessages([{
+    const welcomeMessage = {
       type: 'ai',
-      text: welcomeText,
+      text: welcomeMessages[userProfile.preferred_language] || welcomeMessages['en-US'],
       timestamp: new Date(),
       isWelcome: true
-    }]);
+    };
+    
+    setMessages([welcomeMessage]);
   };
 
   const handleSwitchUser = () => {
@@ -95,196 +99,8 @@ function App() {
   };
 
   // =====================================
-  // LIST ITEM INTERACTION HANDLERS
+  // AI COMMUNICATION - SIMPLIFIED AI-FIRST APPROACH
   // =====================================
-  
-  /**
-   * Handle updates to list items (complete, uncomplete, delete)
-   * This function will be passed to ContentDisplay component
-   */
-  const handleUpdateListItem = async (action) => {
-    if (!currentUser) {
-      console.error('❌ No user selected');
-      return;
-    }
-  
-    try {
-      console.log('🔄 Handling list item update:', action);
-      await handleAiActions([action], currentUser.user_id);
-      console.log('✅ List item updated successfully');
-      console.log('💾 About to call saveDataChanges...');
-      await saveDataChanges([action]);
-      console.log('✅ saveDataChanges call completed');
-      
-      
-    } catch (error) {
-      console.error('❌ Error updating list item:', error);
-    }
-  };
-
-
-  const handleDeleteList = async (action) => {
-    if (!currentUser) {
-      console.error('❌ No user selected');
-      return;
-    }
-  
-    try {
-      console.log('🗑️ Handling list deletion:', action);
-      
-      // Process the action through AI actions handler
-      await handleAiActions([action], currentUser.user_id);
-      
-      // Also call the backend API directly for immediate effect
-      await saveDataChanges([action]);
-      
-      console.log('✅ List deleted successfully');
-      
-    } catch (error) {
-      console.error('❌ Error deleting list:', error);
-      // You might want to show a user-friendly error message here
-    }
-  };
-  
-  /**
-   * Handle deleting entire schedules
-   */
-  const handleDeleteSchedule = async (action) => {
-    if (!currentUser) {
-      console.error('❌ No user selected');
-      return;
-    }
-  
-    try {
-      console.log('🗑️ Handling schedule deletion:', action);
-      
-      // Process the action through AI actions handler
-      await handleAiActions([action], currentUser.user_id);
-      
-      // Also call the backend API directly for immediate effect
-      await saveDataChanges([action]);
-      
-      console.log('✅ Schedule deleted successfully');
-      
-    } catch (error) {
-      console.error('❌ Error deleting schedule:', error);
-    }
-  };
-  
-  /**
-   * Handle deleting individual events
-   */
-  const handleDeleteEvent = async (action) => {
-    if (!currentUser) {
-      console.error('❌ No user selected');
-      return;
-    }
-  
-    try {
-      console.log('🗑️ Handling event deletion:', action);
-      
-      // Process the action through AI actions handler
-      await handleAiActions([action], currentUser.user_id);
-      
-      // Also call the backend API directly for immediate effect
-      await saveDataChanges([action]);
-      
-      console.log('✅ Event deleted successfully');
-      
-    } catch (error) {
-      console.error('❌ Error deleting event:', error);
-    }
-  };
-  
-  /**
-   * Handle editing individual events
-   */
-  const handleEditEvent = async (action) => {
-    if (!currentUser) {
-      console.error('❌ No user selected');
-      return;
-    }
-  
-    try {
-      console.log('📝 Handling event edit:', action);
-      
-      // Process the action through AI actions handler
-      await handleAiActions([action], currentUser.user_id);
-      
-      // Also call the backend API directly for immediate effect
-      await saveDataChanges([action]);
-      
-      console.log('✅ Event edited successfully');
-      
-    } catch (error) {
-      console.error('❌ Error editing event:', error);
-    }
-  };
-
-  /**
- * Handle memory item updates (edit)
- */
-const handleUpdateMemoryItem = async (action) => {
-  if (!currentUser) {
-    console.error('❌ No user selected');
-    return;
-  }
-
-  try {
-    console.log('📝 Handling memory item update:', action);
-    await handleAiActions([action], currentUser.user_id);
-    console.log('✅ Memory item updated successfully');
-    await saveDataChanges([action]);
-    
-  } catch (error) {
-    console.error('❌ Error updating memory item:', error);
-  }
-};
-
-/**
- * Handle memory item deletion
- */
-const handleDeleteMemoryItem = async (action) => {
-  if (!currentUser) {
-    console.error('❌ No user selected');
-    return;
-  }
-
-  try {
-    console.log('🗑️ Handling memory item deletion:', action);
-    await handleAiActions([action], currentUser.user_id);
-    console.log('✅ Memory item deleted successfully');
-    await saveDataChanges([action]);
-    
-  } catch (error) {
-    console.error('❌ Error deleting memory item:', error);
-  }
-};
-
-/**
- * Handle memory category deletion
- */
-const handleDeleteMemory = async (action) => {
-  if (!currentUser) {
-    console.error('❌ No user selected');
-    return;
-  }
-
-  try {
-    console.log('🗑️ Handling memory category deletion:', action);
-    await handleAiActions([action], currentUser.user_id);
-    console.log('✅ Memory category deleted successfully');
-    await saveDataChanges([action]);
-    
-  } catch (error) {
-    console.error('❌ Error deleting memory category:', error);
-  }
-};
-  /**
- * Update local state for list items
- * This mimics the update_list logic from useDataManagement
- */
-
   
   const sendMessage = async (messageText) => {
     if (!currentUser) {
@@ -295,6 +111,7 @@ const handleDeleteMemory = async (action) => {
     const trimmedMessage = messageText.trim();
     if (!trimmedMessage) return;
 
+    // Clear speech input
     clearText();
     setInputText('');
 
@@ -312,7 +129,7 @@ const handleDeleteMemory = async (action) => {
     try {
       console.log(`📤 Sending message from ${currentUser.display_name}: "${trimmedMessage}"`);
 
-      // Prepare context with current data
+      // Prepare context with current data (for AI context, not local processing)
       const context = {
         lists: userLists,
         schedules: userSchedules,
@@ -320,7 +137,7 @@ const handleDeleteMemory = async (action) => {
         chats: userChats
       };
 
-      // Send to backend with user context
+      // Send to backend - AI will handle EVERYTHING
       const response = await fetch('http://localhost:3001/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -329,7 +146,7 @@ const handleDeleteMemory = async (action) => {
           mode: currentMode,
           context: context,
           language: currentUser.preferred_language,
-          userId: currentUser.user_id // Pass the current user ID
+          userId: currentUser.user_id
         })
       });
 
@@ -337,38 +154,32 @@ const handleDeleteMemory = async (action) => {
         const data = await response.json();
         console.log(`📥 AI Response for ${currentUser.display_name}:`, data);
 
-        
-        if (data.actions) {
-          console.log('📋 data.actions.length:', data.actions.length);
-          console.log('📋 First action (if exists):', data.actions[0]);
-        } else {
-          console.log('❌ data.actions is falsy');
-        }
-  
         // Add AI response to conversation
         const aiMessage = {
           type: 'ai',
           text: data.response,
           timestamp: new Date(),
-          actions: data.actions || []
+          actions: data.actions || [],
+          metadata: data.metadata || {}
         };
-  
-        setMessages(prev => [...prev, aiMessage]);
-  
-        // DEBUG: Enhanced action processing check
 
-  
-        // Process any actions
-        if (data.actions && data.actions.length > 0) {
-          console.log(`⚡ Processing ${data.actions.length} actions for user ${currentUser.user_id}`);
-          handleAiActions(data.actions);
+        setMessages(prev => [...prev, aiMessage]);
+
+        // ✅ SIMPLIFIED: AI already processed everything on backend!
+        // Just refresh the UI data to show the changes
+        if (data.actionResults && data.actionResults.length > 0) {
+          const successfulActions = data.actionResults.filter(r => r.success);
+          console.log(`✅ AI processed ${successfulActions.length} actions successfully`);
           
-          // Save data changes to backend
-          console.log('💾 About to call saveDataChanges...');
-          await saveDataChanges(data.actions);
-          console.log('✅ saveDataChanges call completed');
-        } 
-         
+          // Refresh user data to show the changes
+          await loadUserDataForUser(currentUser.user_id);
+        }
+
+        // Log AI intelligence features
+        if (data.metadata?.aiMatchingUsed) {
+          console.log('🧠 AI used intelligent matching for ambiguous requests');
+        }
+        
       } else {
         throw new Error('Failed to get AI response');
       }
@@ -388,80 +199,146 @@ const handleDeleteMemory = async (action) => {
     }
   };
 
-  const handleIntelligentResponse = async (responseData) => {
-    // AI already executed everything on backend!
-    console.log('🤖 AI Response:', responseData.response);
-    
-    if (responseData.operations?.length > 0) {
-        console.log(`✅ AI executed ${responseData.operations.length} operations`);
-        // Refresh UI data
-        await loadUserData(currentUser.user_id);
+  // =====================================
+  // MANUAL UI OPERATIONS (Keep these for direct UI interactions)
+  // =====================================
+  
+  // These handle direct UI actions (like clicking edit/delete buttons)
+  // They use handleAiActions for immediate UI updates + backend notification
+  
+  const handleDeleteList = async (action) => {
+    if (!currentUser) return;
+    try {
+      console.log('🗑️ Manual list deletion:', action);
+      await handleAiActions([action], currentUser.user_id);
+      // Also notify backend for persistence
+      await notifyBackendOfAction(action);
+    } catch (error) {
+      console.error('❌ Error deleting list:', error);
     }
-    
-    if (responseData.dataAnalysis) {
-        console.log('📊 AI Analysis:', responseData.dataAnalysis);
-        // Optionally show insights to user
+  };
+
+  const handleUpdateListItem = async (action) => {
+    if (!currentUser) return;
+    try {
+      console.log('📝 Manual list item update:', action);
+      await handleAiActions([action], currentUser.user_id);
+      // Also notify backend for persistence
+      await notifyBackendOfAction(action);
+    } catch (error) {
+      console.error('❌ Error updating list item:', error);
     }
-};
+  };
+
+  const handleDeleteListItem = async (action) => {
+    if (!currentUser) return;
+    try {
+      console.log('🗑️ Manual list item deletion:', action);
+      await handleAiActions([action], currentUser.user_id);
+      // Also notify backend for persistence
+      await notifyBackendOfAction(action);
+    } catch (error) {
+      console.error('❌ Error deleting list item:', error);
+    }
+  };
+
+  const handleDeleteSchedule = async (action) => {
+    if (!currentUser) return;
+    try {
+      console.log('🗑️ Manual schedule deletion:', action);
+      await handleAiActions([action], currentUser.user_id);
+      // Also notify backend for persistence
+      await notifyBackendOfAction(action);
+    } catch (error) {
+      console.error('❌ Error deleting schedule:', error);
+    }
+  };
+
+  const handleDeleteEvent = async (action) => {
+    if (!currentUser) return;
+    try {
+      console.log('🗑️ Manual event deletion:', action);
+      await handleAiActions([action], currentUser.user_id);
+      // Also notify backend for persistence
+      await notifyBackendOfAction(action);
+    } catch (error) {
+      console.error('❌ Error deleting event:', error);
+    }
+  };
+
+  const handleEditEvent = async (action) => {
+    if (!currentUser) return;
+    try {
+      console.log('📝 Manual event edit:', action);
+      await handleAiActions([action], currentUser.user_id);
+      // Also notify backend for persistence
+      await notifyBackendOfAction(action);
+    } catch (error) {
+      console.error('❌ Error editing event:', error);
+    }
+  };
+
+  const handleUpdateMemoryItem = async (action) => {
+    if (!currentUser) return;
+    try {
+      console.log('📝 Manual memory item update:', action);
+      await handleAiActions([action], currentUser.user_id);
+      // Also notify backend for persistence
+      await notifyBackendOfAction(action);
+    } catch (error) {
+      console.error('❌ Error updating memory item:', error);
+    }
+  };
+
+  const handleDeleteMemoryItem = async (action) => {
+    if (!currentUser) return;
+    try {
+      console.log('🗑️ Manual memory item deletion:', action);
+      await handleAiActions([action], currentUser.user_id);
+      // Also notify backend for persistence
+      await notifyBackendOfAction(action);
+    } catch (error) {
+      console.error('❌ Error deleting memory item:', error);
+    }
+  };
+
+  const handleDeleteMemory = async (action) => {
+    if (!currentUser) return;
+    try {
+      console.log('🗑️ Manual memory category deletion:', action);
+      await handleAiActions([action], currentUser.user_id);
+      // Also notify backend for persistence
+      await notifyBackendOfAction(action);
+    } catch (error) {
+      console.error('❌ Error deleting memory category:', error);
+    }
+  };
+
+  // Helper function to notify backend of manual UI actions
+  const notifyBackendOfAction = async (action) => {
+    try {
+      await fetch('http://localhost:3001/save-data-enhanced', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: currentUser.user_id,
+          actions: [action]
+        })
+      });
+    } catch (error) {
+      console.error('❌ Error notifying backend:', error);
+    }
+  };
 
   // =====================================
   // INPUT HANDLING
   // =====================================
   
-  const handleSubmit = async (e) => {
+  const handleSubmit = (e) => {
     e.preventDefault();
     if (!inputText.trim() || isAILoading) return;
-
-    const userMessage = {
-        type: 'user',
-        text: inputText.trim(),
-        timestamp: new Date(),
-        user: currentUser?.display_name
-    };
-
-    setMessages(prev => [...prev, userMessage]);
-    setIsAILoading(true);
-    setInputText('');
-
-    try {
-        const response = await fetch('http://localhost:3001/chat', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                message: userMessage.text,
-                mode: currentMode,
-                language: currentUser.preferred_language,
-                userId: currentUser.user_id
-            })
-        });
-
-        if (response.ok) {
-            const responseData = await response.json();
-            console.log(`📥 Intelligent AI Response:`, responseData);
-
-            // Add AI response to conversation
-            const aiMessage = {
-                type: 'ai',
-                text: responseData.response,
-                timestamp: new Date(),
-                intelligentProcessing: responseData.intelligentProcessing
-            };
-
-            setMessages(prev => [...prev, aiMessage]);
-
-            // Handle intelligent response (AI already executed operations!)
-            await handleIntelligentResponse(responseData);
-            
-        } else {
-            throw new Error('Failed to get AI response');
-        }
-    } catch (error) {
-        console.error('❌ Error:', error);
-        // Handle error...
-    } finally {
-        setIsAILoading(false);
-    }
-};
+    sendMessage(inputText);
+  };
 
   const handleSpeechSubmit = () => {
     if (accumulatedText.trim()) {
@@ -516,78 +393,36 @@ const handleDeleteMemory = async (action) => {
           <div className="status-row">
             <div>Listening: {isListening ? 'Yes' : 'No'}</div>
             <div>AI Loading: {isAILoading ? 'Yes' : 'No'}</div>
-            <div>Messages: {messages.length}</div>
+            <div>Mode: {currentMode}</div>
+            <div>Language: {currentLanguage}</div>
             <div>Lists: {Object.keys(userLists).length}</div>
             <div>Schedules: {Object.keys(userSchedules).length}</div>
             <div>Memory: {Object.keys(userMemory).length}</div>
-            <div>Speech: {accumulatedText.length} chars</div>
           </div>
         )}
       </div>
 
+      {/* Content Display */}
       <ContentDisplay
-        currentMode={currentMode}
-        messages={messages}
+        mode={currentMode}
         userLists={userLists}
         userSchedules={userSchedules}
         userMemory={userMemory}
-        isDataLoading={isDataLoading}
+        userChats={userChats}
+        messages={messages}
+        language={currentLanguage}
+        
+        // Manual UI action handlers (for direct button clicks)
+        onDeleteList={handleDeleteList}
         onUpdateListItem={handleUpdateListItem}
-        onDeleteList={handleDeleteList}           
-        onDeleteSchedule={handleDeleteSchedule}   
-        onDeleteEvent={handleDeleteEvent}         
+        onDeleteListItem={handleDeleteListItem}
+        onDeleteSchedule={handleDeleteSchedule}
+        onDeleteEvent={handleDeleteEvent}
         onEditEvent={handleEditEvent}
         onUpdateMemoryItem={handleUpdateMemoryItem}
         onDeleteMemoryItem={handleDeleteMemoryItem}
         onDeleteMemory={handleDeleteMemory}
       />
-
-
-      {/* Live Speech Display */}
-      {isListening && accumulatedText && (
-        <div className="live-speech">
-          <strong>🎤 Live Speech Recognition:</strong>
-          <div className="speech-text">{accumulatedText}</div>
-        </div>
-      )}
-
-      {/* Messages Container */}
-      <div className="content-container">
-        <div className="content-title">💬 {currentMode.charAt(0).toUpperCase() + currentMode.slice(1)} Mode</div>
-        
-        {messages.length === 0 ? (
-          <div className="empty-state">
-            <h3>Welcome to your AI Assistant!</h3>
-            <p>Start a conversation in your preferred language: {currentLanguage}</p>
-            <div className="empty-state-hint">
-              <small>💡 Try: "Create a shopping list" or "Add meeting to schedule"</small>
-            </div>
-          </div>
-        ) : (
-          <div className="messages-container">
-            {messages.map((message, index) => (
-              <div key={index} className={`message ${message.type}-message ${message.isWelcome ? 'welcome' : ''}`}>
-                <div className="message-content">
-                  <strong>
-                    {message.type === 'user' ? `${message.user || currentUser?.display_name}: ` : '🤖 Assistant: '}
-                  </strong>
-                  {message.text}
-                </div>
-                
-                {message.actions && message.actions.length > 0 && (
-                  <div className="message-actions">
-                    <small>Actions: {message.actions.map(a => a.type).join(', ')}</small>
-                  </div>
-                )}
-                
-                <div className="message-time">
-                  {message.timestamp.toLocaleTimeString()}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
 
       {/* Input Section */}
       <div className="input-section">
@@ -600,44 +435,41 @@ const handleDeleteMemory = async (action) => {
             className="message-input"
             disabled={isAILoading}
           />
-          <button 
-            type="submit" 
-            className="send-button"
-            disabled={isAILoading || !inputText.trim()}
-          >
+          <button type="submit" disabled={isAILoading || !inputText.trim()}>
             {isAILoading ? '⏳' : '📤'}
           </button>
         </form>
 
-        {/* Voice Input Controls */}
-        <div className="voice-controls">
+        {/* Speech Controls */}
+        <div className="speech-controls">
           <button
             onClick={isListening ? stopListening : startListening}
-            className={`btn ${isListening ? 'recording' : ''}`}
+            className={`speech-button ${isListening ? 'listening' : ''}`}
             disabled={isAILoading}
           >
-            {isListening ? '🔴 Stop' : '🎤 Start'} Voice
+            {isListening ? '🛑 Stop' : '🎤 Speak'}
           </button>
           
           {accumulatedText && (
-            <>
-              <button
-                onClick={handleSpeechSubmit}
-                className="speech-submit-button"
-                disabled={isAILoading}
-              >
-                📤 Send Speech
+            <div className="speech-preview">
+              <p>"{accumulatedText}"</p>
+              <button onClick={handleSpeechSubmit} disabled={isAILoading}>
+                Send Speech
               </button>
-              <button
-                onClick={clearText}
-                className="clear-speech-button"
-              >
-                🗑️ Clear
-              </button>
-            </>
+              <button onClick={clearText}>Clear</button>
+            </div>
           )}
         </div>
       </div>
+
+      {/* Loading States */}
+      {isAILoading && (
+        <div className="loading-overlay">
+          <div className="loading-message">
+            🤖 AI is processing your request...
+          </div>
+        </div>
+      )}
     </div>
   );
 }
