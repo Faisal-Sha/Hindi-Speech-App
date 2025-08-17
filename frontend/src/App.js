@@ -150,52 +150,52 @@ function App() {
         })
       });
 
-      if (response.ok) {
-        const data = await response.json();
-        console.log(`📥 AI Response for ${currentUser.display_name}:`, data);
-
-        // Add AI response to conversation
-        const aiMessage = {
-          type: 'ai',
-          text: data.response,
-          timestamp: new Date(),
-          actions: data.actions || [],
-          metadata: data.metadata || {}
-        };
-
-        setMessages(prev => [...prev, aiMessage]);
-
-        // ✅ SIMPLIFIED: AI already processed everything on backend!
-        // Just refresh the UI data to show the changes
-        if (data.actionResults && data.actionResults.length > 0) {
-          const successfulActions = data.actionResults.filter(r => r.success);
-          console.log(`✅ AI processed ${successfulActions.length} actions successfully`);
-          
-          // Refresh user data to show the changes
-          await loadUserDataForUser(currentUser.user_id);
-        }
-
-        // Log AI intelligence features
-        if (data.metadata?.aiMatchingUsed) {
-          console.log('🧠 AI used intelligent matching for ambiguous requests');
-        }
-        
-      } else {
-        throw new Error('Failed to get AI response');
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
+
+      const aiResponse = await response.json();
+      console.log('🤖 AI Response received:', aiResponse);
+
+      // Add AI response to chat
+      const aiMessage = {
+        type: 'ai',
+        text: aiResponse.response || "I'm here to help!",
+        timestamp: new Date(),
+        mode: currentMode,
+        actions: aiResponse.actions || []
+      };
+      setMessages(prev => [...prev, aiMessage]);
+
+      // 🔑 KEY FIX: Reload data if actions were processed
+      if (aiResponse.actionResults && aiResponse.actionResults.length > 0) {
+        console.log('🔄 Actions were processed, reloading user data...');
+        
+        // Wait a moment for backend to complete processing
+        setTimeout(async () => {
+          await loadUserData(currentUser.user_id);
+          console.log('✅ Data refreshed after AI actions');
+        }, 500);
+      }
+
+      
+
     } catch (error) {
       console.error('❌ Error sending message:', error);
       
       const errorMessage = {
         type: 'ai',
-        text: 'Sorry, I encountered an error. Please try again.',
+        text: `Sorry, I'm having trouble right now. Error: ${error.message}`,
         timestamp: new Date(),
+        mode: currentMode,
         isError: true
       };
-      
       setMessages(prev => [...prev, errorMessage]);
     } finally {
       setIsAILoading(false);
+      // Clear input
+      clearText();
+      setInputText('');
     }
   };
 
@@ -404,14 +404,12 @@ function App() {
 
       {/* Content Display */}
       <ContentDisplay
-        mode={currentMode}
+        currentMode={currentMode}
         userLists={userLists}
         userSchedules={userSchedules}
         userMemory={userMemory}
-        userChats={userChats}
         messages={messages}
-        language={currentLanguage}
-        
+        language={currentLanguage} 
         // Manual UI action handlers (for direct button clicks)
         onDeleteList={handleDeleteList}
         onUpdateListItem={handleUpdateListItem}

@@ -1,599 +1,223 @@
+// frontend/src/hooks/useDataManagement.js - ALL-IN-ONE VERSION
+import { useState, useEffect, useCallback } from 'react';
 
-import { useState, useEffect } from 'react';
-
-const useDataManagement = (messages = []) => {
-  // State for different data types
+const useDataManagement = (messages) => {
+  console.log('🔧 useDataManagement hook initialized');
+  
+  // ===== STATE MANAGEMENT =====
   const [userLists, setUserLists] = useState({});
   const [userSchedules, setUserSchedules] = useState({});
   const [userMemory, setUserMemory] = useState({});
-  const [userChats, setUserChats] = useState({});
+  const [userChats, setUserChats] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState(null);
 
-  // Load user data from backend on startup
-  useEffect(() => {
-    loadUserData();
+  // ===== DATA TRANSFORMATION FUNCTION =====
+  const transformBackendData = useCallback((rawData) => {
+    console.log('🔄 Transforming backend data:', rawData);
+    
+    const result = {
+      lists: {},
+      schedules: {},
+      memory: {}
+    };
+
+    // Transform Lists
+    if (rawData.lists) {
+      console.log('📋 Processing lists data:', rawData.lists);
+      
+      if (typeof rawData.lists === 'object' && rawData.lists !== null) {
+        // Backend returns object of lists - process each one
+        Object.entries(rawData.lists).forEach(([listKey, list]) => {
+          result.lists[listKey] = {
+            name: list.name || listKey,
+            created: list.created_at || list.created || new Date(),
+            updated: list.updated_at || list.updated || new Date(),
+            // Check for items in various possible locations
+            items: list.items || list.listItems || list.tasks || []
+          };
+          console.log(`✅ Processed list: ${listKey}`, result.lists[listKey]);
+        });
+      }
+    }
+
+    // Transform Schedules
+    if (rawData.schedules) {
+      console.log('📅 Processing schedules data:', rawData.schedules);
+      
+      if (typeof rawData.schedules === 'object' && rawData.schedules !== null) {
+        // Backend returns object of schedules - process each one
+        Object.entries(rawData.schedules).forEach(([scheduleKey, schedule]) => {
+          result.schedules[scheduleKey] = {
+            name: schedule.name || scheduleKey,
+            created: schedule.created_at || schedule.created || new Date(),
+            updated: schedule.updated_at || schedule.updated || new Date(),
+            // Check for events in various possible locations
+            events: schedule.events || schedule.scheduleEvents || schedule.appointments || []
+          };
+          console.log(`✅ Processed schedule: ${scheduleKey}`, result.schedules[scheduleKey]);
+        });
+      }
+    }
+
+    // Transform Memory
+    if (rawData.memory) {
+      console.log('🧠 Processing memory data:', rawData.memory);
+      
+      if (typeof rawData.memory === 'object' && rawData.memory !== null) {
+        // Backend returns object of memory categories - process each one
+        Object.entries(rawData.memory).forEach(([categoryKey, memoryCategory]) => {
+          result.memory[categoryKey] = {
+            name: memoryCategory.name || categoryKey,
+            created: memoryCategory.created_at || memoryCategory.created || new Date(),
+            updated: memoryCategory.updated_at || memoryCategory.updated || new Date(),
+            // Check for items in various possible locations
+            items: memoryCategory.items || memoryCategory.memoryItems || memoryCategory.data || []
+          };
+          console.log(`✅ Processed memory category: ${categoryKey}`, result.memory[categoryKey]);
+        });
+      }
+    }
+
+    console.log('🎯 Final transformed data:', result);
+    console.log('📊 Transformation summary:', {
+      listsCount: Object.keys(result.lists).length,
+      schedulesCount: Object.keys(result.schedules).length,
+      memoryCount: Object.keys(result.memory).length,
+      listsWithItems: Object.values(result.lists).filter(list => list.items.length > 0).length,
+      schedulesWithEvents: Object.values(result.schedules).filter(schedule => schedule.events.length > 0).length,
+      memoryWithItems: Object.values(result.memory).filter(memory => memory.items.length > 0).length
+    });
+    
+    return result;
   }, []);
 
-  const findBestMatchingItem = (targetName, existingItems, itemType = 'item') => {
-    if (!targetName || !existingItems) return null;
-    
-    console.log(`🔍 Looking for ${itemType}: "${targetName}" in existing items:`, Object.keys(existingItems));
-    
-    // Step 1: Try exact match (HIGHEST PRIORITY)
-    if (existingItems[targetName]) {
-      console.log(`✅ Found exact match: "${targetName}"`);
-      return targetName;
-    }
-    
-    // Step 2: Try case-insensitive match (SECOND HIGHEST)
-    const targetLower = targetName.toLowerCase();
-    for (const [itemName, item] of Object.entries(existingItems)) {
-      if (itemName.toLowerCase() === targetLower) {
-        console.log(`✅ Found case-insensitive match: "${itemName}" for "${targetName}"`);
-        return itemName;
-      }
-    }
-    
-    // Step 3: Try partial match with name keywords (THIRD PRIORITY)
-    for (const [itemName, item] of Object.entries(existingItems)) {
-      const itemNameLower = itemName.toLowerCase();
-      
-      // Check if the target contains the list name or vice versa
-      if (itemNameLower.includes(targetLower) || targetLower.includes(itemNameLower)) {
-        console.log(`✅ Found partial name match: "${itemName}" for "${targetName}"`);
-        return itemName;
-      }
-    }
-    
-    // Step 4: ONLY if no name matches found, try vague matching
-    const isVagueRequest = ['list', 'schedule', 'memory', 'the list', 'my list', 'the schedule', 'my schedule'].includes(targetLower);
-    
-    if (isVagueRequest) {
-      // If only one item exists, use that
-      const existingItemNames = Object.keys(existingItems);
-      if (existingItemNames.length === 1) {
-        console.log(`✅ Using only existing ${itemType}: "${existingItemNames[0]}" for vague request "${targetName}"`);
-        return existingItemNames[0];
-      }
-    }
-    
-    return null;
-  };
-  
-  // Load user data function
-  const loadUserData = async (userId = 'default') => {
+  // ===== REAL DATA LOADING =====
+  const loadUserData = useCallback(async (userId) => {
+    console.log(`📥 Loading data for user: ${userId}`);
+    setIsLoading(true);
+    setCurrentUserId(userId);
+
     try {
-      setIsLoading(true);
-      console.log(`📖 Loading user data for: ${userId}`);
+      console.log('🌐 Fetching data from backend using /data endpoint...');
       
+      // Use the correct endpoint that exists in your backend
       const response = await fetch(`http://localhost:3001/data/${userId}`);
       
-      if (response.ok) {
-        const userData = await response.json();
-        console.log('✅ Loaded user data:', userData);
-        
-        // Safely set user data with fallbacks
-        setUserLists(userData.lists || {});
-        setUserSchedules(userData.schedules || {});
-        setUserMemory(userData.memory || {});
-        setUserChats(userData.chats || {});
-      } else {
-        console.log('⚠️ No existing user data found, starting fresh');
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
+      
+      const rawData = await response.json();
+      console.log('📦 Raw data from /data endpoint:', rawData);
+
+      // Transform the data
+      const transformedData = transformBackendData(rawData);
+
+      // Update state with transformed data
+      setUserLists(transformedData.lists);
+      setUserSchedules(transformedData.schedules);
+      setUserMemory(transformedData.memory);
+
+      console.log('✅ Data loading and transformation completed successfully');
+      console.log('📊 Final state will be:', {
+        listsCount: Object.keys(transformedData.lists).length,
+        schedulesCount: Object.keys(transformedData.schedules).length,
+        memoryCount: Object.keys(transformedData.memory).length
+      });
+
     } catch (error) {
       console.error('❌ Error loading user data:', error);
+      
+      // Reset to empty state on error
+      setUserLists({});
+      setUserSchedules({});
+      setUserMemory({});
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [transformBackendData]);
 
-  // =====================================
-  // MAIN handleAiActions FUNCTION
-  // =====================================
-  
-  const handleAiActions = async (actions, userId = 'default') => {
-    if (!actions || !Array.isArray(actions)) {
-      console.log('⚠️ No actions provided or actions is not an array');
+  // ===== ACTION HANDLERS =====
+  const handleAiActions = useCallback(async (actions, userId) => {
+    console.log('🤖 Processing AI actions:', actions);
+    
+    if (!actions || actions.length === 0) {
+      console.log('⚠️ No actions to process');
       return;
     }
 
-    console.log(`🤖 Processing ${actions.length} AI actions for user ${userId}`);
-
     for (const action of actions) {
+      console.log(`🔄 Processing action: ${action.type}`, action);
+      
       try {
-        console.log('🔄 Processing action:', action);
+        // Use the /save-data-enhanced endpoint that exists in your backend
+        const response = await fetch(`http://localhost:3001/save-data-enhanced`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            userId,
+            actions: [action] // Send as array since backend expects actions array
+          })
+        });
 
-        switch (action.type) {
-          case 'create_list':
-            await handleCreateList(action, userId);
-            break;
-            
-          case 'add_to_list':
-            await handleAddToList(action, userId);
-            break;
-            
-          case 'update_list_item':
-            await handleUpdateListItem(action, userId);
-            break;
-            
-          case 'delete_list_item':
-            await handleDeleteListItem(action, userId);
-            break;
-            
-          case 'delete_list':
-            await handleDeleteList(action, userId);
-            break;
-            
-          case 'create_schedule':
-            await handleCreateSchedule(action, userId);
-            break;
-            
-          case 'add_event':
-            await handleAddEvent(action, userId);
-            break;
-            
-          case 'update_event':
-            await handleUpdateEvent(action, userId);
-            break;
-            
-          case 'delete_event':
-            await handleDeleteEvent(action, userId);
-            break;
-            
-          case 'delete_schedule':
-            await handleDeleteSchedule(action, userId);
-            break;
-            
-          case 'create_memory':
-            await handleCreateMemory(action, userId);
-            break;
-            
-          case 'add_memory':
-            await handleAddMemory(action, userId);
-            break;
-            
-          case 'update_memory_item':
-            await handleUpdateMemoryItem(action, userId);
-            break;
-            
-          case 'delete_memory_item':
-            await handleDeleteMemoryItem(action, userId);
-            break;
-            
-          case 'delete_memory':
-            await handleDeleteMemory(action, userId);
-            break;
-            
-          default:
-            console.log(`⚠️ Unknown action type: ${action.type}`);
+        if (response.ok) {
+          const result = await response.json();
+          console.log(`✅ Action ${action.type} processed successfully:`, result);
+        } else {
+          const errorText = await response.text();
+          console.error(`❌ Failed to process action ${action.type}:`, errorText);
         }
+        
       } catch (error) {
         console.error(`❌ Error processing action ${action.type}:`, error);
       }
     }
-  };
+    
+    // Reload data after processing actions
+    console.log('🔄 Reloading data after actions...');
+    await loadUserData(userId);
+  }, [loadUserData]);
 
-  // =====================================
-  // LIST ACTION HANDLERS
-  // =====================================
-  
-  const handleCreateList = async (action, userId) => {
-    const { listName, items = [], listType = 'custom' } = action.data;
-    
-    setUserLists(prev => ({
-      ...prev,
-      [listName]: {
-        name: listName,
-        type: listType,
-        items: items.map((item, index) => ({
-          id: Date.now() + index,
-          text: item,
-          completed: false,
-          created: new Date()
-        })),
-        created: new Date(),
-        updated: new Date()
-      }
-    }));
-    
-    console.log(`✅ Created list: ${listName} with ${items.length} items`);
-  };
-
-  const handleAddToList = async (action, userId) => {
-    const { listName, items = [] } = action.data;
-    
-    // Find the best matching list
-    const bestMatch = findBestMatchingItem(listName, userLists, 'list');
-    if (!bestMatch) {
-      console.log(`⚠️ List "${listName}" not found, creating it`);
-      await handleCreateList({ data: { listName, items } }, userId);
-      return;
-    }
-    
-    setUserLists(prev => ({
-      ...prev,
-      [bestMatch]: {
-        ...prev[bestMatch],
-        items: [
-          ...prev[bestMatch].items,
-          ...items.map((item, index) => ({
-            id: Date.now() + index,
-            text: item,
-            completed: false,
-            created: new Date()
-          }))
-        ],
-        updated: new Date()
-      }
-    }));
-    
-    console.log(`✅ Added ${items.length} items to list: ${bestMatch}`);
-  };
-
-  const handleUpdateListItem = async (action, userId) => {
-    const { listName, itemId, updates } = action.data;
-    
-    const bestMatch = findBestMatchingItem(listName, userLists, 'list');
-    if (!bestMatch) {
-      console.log(`⚠️ List "${listName}" not found for item update`);
-      return;
-    }
-    
-    setUserLists(prev => ({
-      ...prev,
-      [bestMatch]: {
-        ...prev[bestMatch],
-        items: prev[bestMatch].items.map(item => 
-          item.id === itemId ? { ...item, ...updates, updated: new Date() } : item
-        ),
-        updated: new Date()
-      }
-    }));
-    
-    console.log(`✅ Updated item ${itemId} in list: ${bestMatch}`);
-  };
-
-  const handleDeleteListItem = async (action, userId) => {
-    const { listName, itemId } = action.data;
-    
-    const bestMatch = findBestMatchingItem(listName, userLists, 'list');
-    if (!bestMatch) {
-      console.log(`⚠️ List "${listName}" not found for item deletion`);
-      return;
-    }
-    
-    setUserLists(prev => ({
-      ...prev,
-      [bestMatch]: {
-        ...prev[bestMatch],
-        items: prev[bestMatch].items.filter(item => item.id !== itemId),
-        updated: new Date()
-      }
-    }));
-    
-    console.log(`✅ Deleted item ${itemId} from list: ${bestMatch}`);
-  };
-
-  const handleDeleteList = async (action, userId) => {
-    const { listName } = action.data;
-    
-    const bestMatch = findBestMatchingItem(listName, userLists, 'list');
-    if (!bestMatch) {
-      console.log(`⚠️ List "${listName}" not found for deletion`);
-      return;
-    }
-    
-    setUserLists(prev => {
-      const newLists = { ...prev };
-      delete newLists[bestMatch];
-      return newLists;
-    });
-    
-    console.log(`✅ Deleted list: ${bestMatch}`);
-  };
-
-  // =====================================
-  // SCHEDULE ACTION HANDLERS
-  // =====================================
-  
-  const handleCreateSchedule = async (action, userId) => {
-    const { scheduleName, scheduleType = 'personal' } = action.data;
-    
-    setUserSchedules(prev => ({
-      ...prev,
-      [scheduleName]: {
-        name: scheduleName,
-        type: scheduleType,
-        events: [],
-        created: new Date(),
-        updated: new Date()
-      }
-    }));
-    
-    console.log(`✅ Created schedule: ${scheduleName}`);
-  };
-
-  const handleAddEvent = async (action, userId) => {
-    const { scheduleName, title, startTime, endTime, description = '', location = '' } = action.data;
-    
-    const bestMatch = findBestMatchingItem(scheduleName, userSchedules, 'schedule');
-    if (!bestMatch) {
-      console.log(`⚠️ Schedule "${scheduleName}" not found, creating it`);
-      await handleCreateSchedule({ data: { scheduleName } }, userId);
-      // Use the new schedule name
-      const newSchedule = scheduleName;
-      setUserSchedules(prev => ({
-        ...prev,
-        [newSchedule]: {
-          ...prev[newSchedule],
-          events: [{
-            id: Date.now(),
-            title,
-            startTime,
-            endTime,
-            description,
-            location,
-            created: new Date()
-          }]
-        }
-      }));
-      return;
-    }
-    
-    setUserSchedules(prev => ({
-      ...prev,
-      [bestMatch]: {
-        ...prev[bestMatch],
-        events: [
-          ...prev[bestMatch].events,
-          {
-            id: Date.now(),
-            title,
-            startTime,
-            endTime,
-            description,
-            location,
-            created: new Date()
-          }
-        ],
-        updated: new Date()
-      }
-    }));
-    
-    console.log(`✅ Added event "${title}" to schedule: ${bestMatch}`);
-  };
-
-  const handleUpdateEvent = async (action, userId) => {
-    const { scheduleName, eventId, updates } = action.data;
-    
-    const bestMatch = findBestMatchingItem(scheduleName, userSchedules, 'schedule');
-    if (!bestMatch) {
-      console.log(`⚠️ Schedule "${scheduleName}" not found for event update`);
-      return;
-    }
-    
-    setUserSchedules(prev => ({
-      ...prev,
-      [bestMatch]: {
-        ...prev[bestMatch],
-        events: prev[bestMatch].events.map(event => 
-          event.id === eventId ? { ...event, ...updates, updated: new Date() } : event
-        ),
-        updated: new Date()
-      }
-    }));
-    
-    console.log(`✅ Updated event ${eventId} in schedule: ${bestMatch}`);
-  };
-
-  const handleDeleteEvent = async (action, userId) => {
-    const { scheduleName, eventId } = action.data;
-    
-    const bestMatch = findBestMatchingItem(scheduleName, userSchedules, 'schedule');
-    if (!bestMatch) {
-      console.log(`⚠️ Schedule "${scheduleName}" not found for event deletion`);
-      return;
-    }
-    
-    setUserSchedules(prev => ({
-      ...prev,
-      [bestMatch]: {
-        ...prev[bestMatch],
-        events: prev[bestMatch].events.filter(event => event.id !== eventId),
-        updated: new Date()
-      }
-    }));
-    
-    console.log(`✅ Deleted event ${eventId} from schedule: ${bestMatch}`);
-  };
-
-  const handleDeleteSchedule = async (action, userId) => {
-    const { scheduleName } = action.data;
-    
-    const bestMatch = findBestMatchingItem(scheduleName, userSchedules, 'schedule');
-    if (!bestMatch) {
-      console.log(`⚠️ Schedule "${scheduleName}" not found for deletion`);
-      return;
-    }
-    
-    setUserSchedules(prev => {
-      const newSchedules = { ...prev };
-      delete newSchedules[bestMatch];
-      return newSchedules;
-    });
-    
-    console.log(`✅ Deleted schedule: ${bestMatch}`);
-  };
-
-  // =====================================
-  // MEMORY ACTION HANDLERS
-  // =====================================
-  
-  const handleCreateMemory = async (action, userId) => {
-    const { categoryName } = action.data;
-    
-    setUserMemory(prev => ({
-      ...prev,
-      [categoryName]: {
-        name: categoryName,
-        items: [],
-        created: new Date(),
-        updated: new Date()
-      }
-    }));
-    
-    console.log(`✅ Created memory category: ${categoryName}`);
-  };
-
-  const handleAddMemory = async (action, userId) => {
-    const { categoryName, items = [] } = action.data;
-    
-    const bestMatch = findBestMatchingItem(categoryName, userMemory, 'memory category');
-    if (!bestMatch) {
-      console.log(`⚠️ Memory category "${categoryName}" not found, creating it`);
-      await handleCreateMemory({ data: { categoryName } }, userId);
-      // Use the new category name
-      const newCategory = categoryName;
-      setUserMemory(prev => ({
-        ...prev,
-        [newCategory]: {
-          ...prev[newCategory],
-          items: items.map((item, index) => ({
-            id: Date.now() + index,
-            key: item.key || item,
-            value: item.value || '',
-            created: new Date()
-          }))
-        }
-      }));
-      return;
-    }
-    
-    setUserMemory(prev => ({
-      ...prev,
-      [bestMatch]: {
-        ...prev[bestMatch],
-        items: [
-          ...prev[bestMatch].items,
-          ...items.map((item, index) => ({
-            id: Date.now() + index,
-            key: item.key || item,
-            value: item.value || '',
-            created: new Date()
-          }))
-        ],
-        updated: new Date()
-      }
-    }));
-    
-    console.log(`✅ Added ${items.length} items to memory category: ${bestMatch}`);
-  };
-
-  const handleUpdateMemoryItem = async (action, userId) => {
-    const { categoryName, itemId, updates } = action.data;
-    
-    const bestMatch = findBestMatchingItem(categoryName, userMemory, 'memory category');
-    if (!bestMatch) {
-      console.log(`⚠️ Memory category "${categoryName}" not found for item update`);
-      return;
-    }
-    
-    setUserMemory(prev => ({
-      ...prev,
-      [bestMatch]: {
-        ...prev[bestMatch],
-        items: prev[bestMatch].items.map(item => 
-          item.id === itemId ? { ...item, ...updates, updated: new Date() } : item
-        ),
-        updated: new Date()
-      }
-    }));
-    
-    console.log(`✅ Updated memory item ${itemId} in category: ${bestMatch}`);
-  };
-
-  const handleDeleteMemoryItem = async (action, userId) => {
-    const { categoryName, itemId } = action.data;
-    
-    const bestMatch = findBestMatchingItem(categoryName, userMemory, 'memory category');
-    if (!bestMatch) {
-      console.log(`⚠️ Memory category "${categoryName}" not found for item deletion`);
-      return;
-    }
-    
-    setUserMemory(prev => ({
-      ...prev,
-      [bestMatch]: {
-        ...prev[bestMatch],
-        items: prev[bestMatch].items.filter(item => item.id !== itemId),
-        updated: new Date()
-      }
-    }));
-    
-    console.log(`✅ Deleted memory item ${itemId} from category: ${bestMatch}`);
-  };
-
-  const handleDeleteMemory = async (action, userId) => {
-    const { categoryName } = action.data;
-    
-    const bestMatch = findBestMatchingItem(categoryName, userMemory, 'memory category');
-    if (!bestMatch) {
-      console.log(`⚠️ Memory category "${categoryName}" not found for deletion`);
-      return;
-    }
-    
-    setUserMemory(prev => {
-      const newMemory = { ...prev };
-      delete newMemory[bestMatch];
-      return newMemory;
-    });
-    
-    console.log(`✅ Deleted memory category: ${bestMatch}`);
-  };
-
-  // =====================================
-  // CHAT PROCESSING (SAFE VERSION)
-  // =====================================
-  
-  // Process messages for chat data (safe version)
+  // ===== DEBUG LOGGING =====
   useEffect(() => {
-    if (Array.isArray(messages) && messages.length > 0) {
-      try {
-        // Process messages for chat organization
-        const chatTopics = messages.reduce((topics, msg) => {
-          if (msg && msg.type === 'user' && msg.text) {
-            // Simple topic extraction
-            const topic = msg.text.length > 50 ? 
-              msg.text.substring(0, 50) + '...' : msg.text;
-            topics.push(topic);
-          }
-          return topics;
-        }, []);
+    console.log('📊 useDataManagement State Update:', {
+      userListsCount: Object.keys(userLists).length,
+      userListsKeys: Object.keys(userLists),
+      userListsSample: Object.keys(userLists).length > 0 ? userLists[Object.keys(userLists)[0]] : null,
+      userSchedulesCount: Object.keys(userSchedules).length,
+      userSchedulesKeys: Object.keys(userSchedules),
+      userSchedulesSample: Object.keys(userSchedules).length > 0 ? userSchedules[Object.keys(userSchedules)[0]] : null,
+      userMemoryCount: Object.keys(userMemory).length,
+      userMemoryKeys: Object.keys(userMemory),
+      userMemorySample: Object.keys(userMemory).length > 0 ? userMemory[Object.keys(userMemory)[0]] : null,
+      isLoading,
+      currentUserId
+    });
+  }, [userLists, userSchedules, userMemory, isLoading, currentUserId]);
 
-        setUserChats(prev => ({
-          ...prev,
-          general: {
-            name: 'General Chat',
-            messages: messages,
-            topics: chatTopics.slice(-5), // Keep last 5 topics
-            updated: new Date()
-          }
-        }));
-      } catch (error) {
-        console.error('❌ Error processing messages:', error);
-        // Don't crash, just continue
-      }
-    }
-  }, [messages]); // Safe dependency since we check if it's an array
-
+  // ===== RETURN VALUES =====
   return {
+    // Data
     userLists,
     userSchedules,
     userMemory,
     userChats,
-    handleAiActions, // ✅ Now this function exists!
+    
+    // Loading state
     isLoading,
-    loadUserData
+    
+    // Functions
+    loadUserData,
+    handleAiActions,
+    
+    // Debug info
+    debugInfo: {
+      currentUserId,
+      dataLoaded: !!(Object.keys(userLists).length || Object.keys(userSchedules).length || Object.keys(userMemory).length)
+    }
   };
 };
 

@@ -311,7 +311,7 @@ router.post('/chat', async (req, res) => {
     // Build smart context for AI
     const { context: smartContext, dataSummary } = await buildSmartContext(userId, mode, context || {}, message);
 
-    // Create AI prompt with context
+    // Create AI prompt with context - FORCE JSON RESPONSE
     const aiPrompt = `${ENHANCED_SYSTEM_PROMPT}
 
       CURRENT USER DATA:
@@ -326,9 +326,28 @@ router.post('/chat', async (req, res) => {
 
       USER MESSAGE: "${message}"
 
-      Respond in ${effectiveLanguage} and let the AI matching handle the complex targeting.`;
+      CRITICAL: You MUST respond with VALID JSON in this exact format. Do not include any text outside the JSON:
 
-    // Get AI response
+      {
+        "response": "Natural conversational response in ${effectiveLanguage}",
+        "actions": [
+          {
+            "type": "smart_add",
+            "intent": "description of what you're doing",
+            "data": {
+              "target": "Shopping List",
+              "operation": "add_to_list",
+              "values": ["milk", "bread", "eggs"],
+              "metadata": {
+                "confidence": "high"
+              }
+            }
+          }
+        ],
+        "queries": []
+      }`;
+
+    // Get AI response with JSON mode
     const completion = await openai.chat.completions.create({
       model: "gpt-3.5-turbo",
       messages: [
@@ -337,28 +356,63 @@ router.post('/chat', async (req, res) => {
       ],
       max_tokens: 1500,
       temperature: 0.7,
+      response_format: { type: "json_object" } // Force JSON response
     });
 
     let aiResponse = completion.choices[0].message.content;
-    console.log(`🤖 AI Response: ${aiResponse.substring(0, 100)}...`);
+    console.log(`🤖 AI Response: ${aiResponse.substring(0, 200)}...`);
 
-    // Parse AI response
+    // Parse AI response with better error handling
     let responseData;
     try {
       responseData = JSON.parse(aiResponse);
+      console.log('✅ Successfully parsed JSON response');
+      console.log('📋 Actions generated:', responseData.actions?.length || 0);
     } catch (e) {
-      console.log("⚠️ AI didn't return JSON, creating structure");
+      console.error("❌ AI didn't return valid JSON:", e);
+      console.error("Raw AI response:", aiResponse);
+      
+      // Create a manual action based on the message content
       responseData = {
-        response: aiResponse,
+        response: aiResponse || "I'll help you with that!",
         actions: [],
         queries: []
       };
+      
+      // Try to manually create an action for common patterns
+      if (message.toLowerCase().includes('add') && message.toLowerCase().includes('list')) {
+        const items = extractItemsFromMessage(message);
+        const targetList = extractListFromMessage(message, Object.keys(dataSummary.lists.names || {}));
+        
+        if (items.length > 0) {
+          responseData.actions = [{
+            type: "smart_add",
+            intent: `Adding items to list`,
+            data: {
+              target: targetList || "Shopping List",
+              operation: "add_to_list", 
+              values: items,
+              metadata: {
+                confidence: "medium",
+                fallbackGenerated: true
+              }
+            }
+          }];
+          responseData.response = `I'll add ${items.join(', ')} to your ${targetList || 'Shopping List'}!`;
+          console.log('🔧 Generated fallback action:', responseData.actions[0]);
+        }
+      }
     }
 
     // Validate response structure
     responseData.response = responseData.response || "I'm here to help!";
     responseData.actions = responseData.actions || [];
     responseData.queries = responseData.queries || [];
+
+    console.log(`🎯 Final actions to process: ${responseData.actions.length}`);
+    responseData.actions.forEach((action, i) => {
+      console.log(`  ${i+1}. ${action.type}: ${action.intent || action.data?.operation}`);
+    });
 
     // Process all actions and queries with smart processor
     let actionResults = [];
@@ -380,30 +434,11 @@ router.post('/chat', async (req, res) => {
             if (result.summary) {
               // Query result - add summary to response
               responseData.response += `\n\n${result.summary}`;
-              
-              // Add detailed breakdown for certain queries
-              if (result.data && result.type === 'event_count' && result.data.breakdown) {
-                responseData.response += "\n\nBreakdown by schedule:";
-                for (const [scheduleName, counts] of Object.entries(result.data.breakdown)) {
-                  responseData.response += `\n• ${scheduleName}: ${counts.total} events`;
-                  if (counts.today > 0) responseData.response += ` (${counts.today} today)`;
-                  if (counts.upcoming > 0) responseData.response += ` (${counts.upcoming} upcoming)`;
-                }
-              }
-              
-              if (result.data && result.type === 'list_count' && result.data.breakdown) {
-                responseData.response += "\n\nBreakdown by list:";
-                for (const [listName, counts] of Object.entries(result.data.breakdown)) {
-                  responseData.response += `\n• ${listName}: ${counts.total} items`;
-                  if (counts.completed > 0) responseData.response += ` (${counts.completed} completed)`;
-                  if (counts.pending > 0) responseData.response += ` (${counts.pending} pending)`;
-                }
-              }
             }
             
             if (result.details?.aiDecision) {
               // Action result - mention AI decision
-              responseData.response += `\n\n(I intelligently matched "${action.data?.target}" to "${result.details.targetList || result.details.name}")`;
+              responseData.response += `\n\n(Successfully processed!)`;
             }
           }
           
@@ -417,6 +452,8 @@ router.post('/chat', async (req, res) => {
           });
         }
       }
+    } else {
+      console.log('⚠️ No actions generated - AI may need better prompting');
     }
 
     // Save conversation to database
@@ -449,6 +486,52 @@ router.post('/chat', async (req, res) => {
     });
   }
 });
+
+// Helper functions for fallback action generation
+function extractItemsFromMessage(message) {
+  const addPatterns = [
+    /add\s+(.+?)\s+to/i,
+    /add\s+(.+)$/i
+  ];
+  
+  for (const pattern of addPatterns) {
+    const match = message.match(pattern);
+    if (match) {
+      const itemsStr = match[1];
+      // Split by common delimiters
+      const items = itemsStr.split(/,|\sand\s|\&/).map(item => item.trim()).filter(item => item.length > 0);
+      return items;
+    }
+  }
+  
+  return [];
+}
+
+function extractListFromMessage(message, existingLists) {
+  const listPatterns = [
+    /to\s+(?:the\s+)?(.+?)\s*(?:list)?$/i,
+    /to\s+(?:my\s+)?(.+?)$/i
+  ];
+  
+  for (const pattern of listPatterns) {
+    const match = message.match(pattern);
+    if (match) {
+      const targetName = match[1].trim();
+      
+      // Try to find exact match first
+      for (const listName of existingLists) {
+        if (listName.toLowerCase().includes(targetName.toLowerCase()) || 
+            targetName.toLowerCase().includes(listName.toLowerCase())) {
+          return listName;
+        }
+      }
+      
+      return targetName;
+    }
+  }
+  
+  return null;
+}
 
 /*============================================
   ENHANCED DATA PROCESSING ROUTE
