@@ -8,11 +8,16 @@ const ContentDisplay = ({
   userSchedules, 
   userMemory,
   isDataLoading, 
+  // List handlers
   onUpdateListItem, 
+  onDeleteListItem,
   onDeleteList,
-  onEditEvent, 
+  // Schedule handlers
+  onAddEvent,
+  onUpdateEvent,
   onDeleteEvent, 
   onDeleteSchedule, 
+  // Memory handlers
   onUpdateMemoryItem,
   onDeleteMemoryItem, 
   onDeleteMemory 
@@ -27,6 +32,27 @@ const ContentDisplay = ({
   const [editMemoryData, setEditMemoryData] = useState({});
 
   const isEditingRef = useRef(false);
+
+  // ===== DEBUG LOGGING =====
+  console.log('🔍 ContentDisplay received props:', {
+    currentMode,
+    userListsKeys: userLists ? Object.keys(userLists) : 'null',
+    userSchedulesKeys: userSchedules ? Object.keys(userSchedules) : 'null', 
+    userMemoryKeys: userMemory ? Object.keys(userMemory) : 'null',
+    isDataLoading,
+    messagesCount: messages?.length || 0,
+    hasHandlers: {
+      onUpdateListItem: !!onUpdateListItem,
+      onDeleteListItem: !!onDeleteListItem,
+      onDeleteList: !!onDeleteList,
+      onUpdateEvent: !!onUpdateEvent,
+      onDeleteEvent: !!onDeleteEvent,
+      onDeleteSchedule: !!onDeleteSchedule,
+      onUpdateMemoryItem: !!onUpdateMemoryItem,
+      onDeleteMemoryItem: !!onDeleteMemoryItem,
+      onDeleteMemory: !!onDeleteMemory
+    }
+  });
 
   // ===== UTILITY FUNCTIONS =====
   const formatDate = (dateInput) => {
@@ -60,413 +86,250 @@ const ContentDisplay = ({
       } else {
         return date.toLocaleDateString();
       }
+      
     } catch (error) {
-      console.warn('Error formatting date:', dateInput, error);
+      console.warn('Error formatting date:', error);
       return 'recently';
     }
   };
 
-  const formatEventTime = (startTime, endTime) => {
-    if (!startTime) return 'No time set';
+  // ===== LIST ITEM FUNCTIONS =====
+  const toggleItemCompletion = useCallback((listName, item) => {
+    if (isEditingRef.current) return; // Don't toggle if editing
     
-    try {
-      const start = new Date(startTime);
-      
-      // Check if start time is valid
-      if (isNaN(start.getTime())) {
-        console.warn('Invalid start time:', startTime);
-        return 'Invalid start time';
-      }
-      
-      // Format options for better readability
-      const dateOptions = { 
-        weekday: 'short', 
-        year: 'numeric', 
-        month: 'short', 
-        day: 'numeric' 
-      };
-      const timeOptions = { 
-        hour: '2-digit', 
-        minute: '2-digit',
-        hour12: true 
-      };
-      
-      // Handle case with no end time
-      if (!endTime) {
-        const startDate = start.toLocaleDateString('en-US', dateOptions);
-        const startTimeStr = start.toLocaleTimeString('en-US', timeOptions);
-        return `${startDate} at ${startTimeStr}`;
-      }
-      
-      // Handle case with end time
-      const end = new Date(endTime);
-      if (isNaN(end.getTime())) {
-        console.warn('Invalid end time:', endTime);
-        // Just show start time if end time is invalid
-        const startDate = start.toLocaleDateString('en-US', dateOptions);
-        const startTimeStr = start.toLocaleTimeString('en-US', timeOptions);
-        return `${startDate} at ${startTimeStr}`;
-      }
-      
-      const startDate = start.toLocaleDateString('en-US', dateOptions);
-      const endDate = end.toLocaleDateString('en-US', dateOptions);
-      const startTimeStr = start.toLocaleTimeString('en-US', timeOptions);
-      const endTimeStr = end.toLocaleTimeString('en-US', timeOptions);
-      
-      // Same day event
-      if (startDate === endDate) {
-        return `${startDate}: ${startTimeStr} → ${endTimeStr}`;
-      }
-      
-      // Multi-day event - show both dates
-      return `${startDate} at ${startTimeStr} → ${endDate} at ${endTimeStr}`;
-      
-    } catch (error) {
-      console.error('Error formatting event time:', { startTime, endTime, error });
-      return 'Invalid time format';
-    }
-  };
-
-  const getEventStartTime = (event) => {
-    return event.startTime || event.start_time;
-  };
-  
-  const getEventEndTime = (event) => {
-    return event.endTime || event.end_time;
-  };
-  
-  const getEventTitle = (event) => {
-    return event.title || event.event_title || 'Untitled Event';
-  };
-  
-  const getEventDescription = (event) => {
-    return event.description || event.event_description;
-  };
-
-  const formatDateTimeForInput = (dateTime) => {
-    if (!dateTime) return '';
-    try {
-      const date = new Date(dateTime);
-      if (isNaN(date.getTime())) return '';
-      
-      // Format for datetime-local input: YYYY-MM-DDTHH:mm
-      const year = date.getFullYear();
-      const month = String(date.getMonth() + 1).padStart(2, '0');
-      const day = String(date.getDate()).padStart(2, '0');
-      const hours = String(date.getHours()).padStart(2, '0');
-      const minutes = String(date.getMinutes()).padStart(2, '0');
-      
-      return `${year}-${month}-${day}T${hours}:${minutes}`;
-    } catch (error) {
-      console.warn('Error formatting datetime for input:', dateTime, error);
-      return '';
-    }
-  };
-
-  const convertLocalDateTimeToISO = (localDateTime) => {
-    if (!localDateTime) return null;
+    console.log(`🔄 Toggling completion for item in list: ${listName}`, item);
     
-    try {
-      // Parse the datetime-local value manually to preserve local time
-      const [datePart, timePart] = localDateTime.split('T');
-      const [year, month, day] = datePart.split('-').map(Number);
-      const [hours, minutes] = timePart.split(':').map(Number);
-      
-      // Create the ISO string preserving the user's intended local time
-      const isoYear = year;
-      const isoMonth = String(month).padStart(2, '0');
-      const isoDay = String(day).padStart(2, '0');
-      const isoHours = String(hours).padStart(2, '0');
-      const isoMinutes = String(minutes).padStart(2, '0');
-      
-      return `${isoYear}-${isoMonth}-${isoDay}T${isoHours}:${isoMinutes}:00.000Z`;
-      
-    } catch (error) {
-      console.error('Error converting local datetime to ISO:', localDateTime, error);
-      return null;
+    if (onUpdateListItem) {
+      onUpdateListItem({
+        type: 'update_list_item',
+        data: {
+          listName,
+          itemId: item.id,
+          operation: 'toggle_completion',
+          updates: { completed: !item.completed }
+        }
+      });
     }
-  };
+  }, [onUpdateListItem]);
 
+  const startEditing = useCallback((listName, item) => {
+    console.log(`📝 Starting edit for item in list: ${listName}`, item);
+    isEditingRef.current = true;
+    setEditingItem({ listName, itemId: item.id });
+    setEditText(typeof item === 'string' ? item : item.text || item.name || '');
+  }, []);
 
-  // ===== LIST ITEM HANDLERS =====
-  const handleItemUpdate = async (listName, item, operation, newText = null) => {
-    if (!onUpdateListItem) {
-      console.warn('onUpdateListItem prop not provided');
+  const saveEdit = useCallback(async (listName, item) => {
+    if (!editText.trim()) {
+      cancelEdit();
       return;
     }
-
-    try {
-      console.log(`🔄 ${operation} item in list "${listName}":`, item);
-      
-      const actionData = {
-        type: 'update_list',
+    
+    console.log(`💾 Saving edit for item in list: ${listName}`);
+    
+    if (onUpdateListItem) {
+      await onUpdateListItem({
+        type: 'update_list_item',
         data: {
-          listName: listName,
+          listName,
           itemId: item.id,
-          operation: operation
+          operation: 'edit',
+          updates: { text: editText.trim() }
         }
-      };
+      });
+    }
+    
+    setEditingItem(null);
+    setEditText('');
+    isEditingRef.current = false;
+  }, [onUpdateListItem, editText]);
 
-      if (newText) {
-        actionData.data.newText = newText;
+  const cancelEdit = useCallback(() => {
+    console.log('❌ Cancelling list item edit');
+    setEditingItem(null);
+    setEditText('');
+    isEditingRef.current = false;
+  }, []);
+
+  const deleteItem = useCallback((listName, item) => {
+    const itemName = typeof item === 'string' ? item : item.text || item.name || 'this item';
+    
+    if (window.confirm(`Are you sure you want to delete "${itemName}"?`)) {
+      console.log(`🗑️ Deleting item from list: ${listName}`, item);
+      
+      if (onDeleteListItem) {
+        onDeleteListItem({
+          type: 'delete_list_item',
+          data: {
+            listName,
+            itemId: item.id
+          }
+        });
       }
+    }
+  }, [onDeleteListItem]);
+
+  const deleteList = useCallback((listName) => {
+    if (window.confirm(`Are you sure you want to delete the entire list "${listName}"? This will remove all items in this list.`)) {
+      console.log(`🗑️ Deleting entire list: ${listName}`);
       
-      await onUpdateListItem(actionData);
-      
-      console.log(`✅ Successfully ${operation}d item`);
-    } catch (error) {
-      console.error(`❌ Error ${operation}ing item:`, error);
-    }
-  };
-
-  const toggleItemCompletion = (listName, item) => {
-    const operation = item.completed ? 'uncomplete' : 'complete';
-    handleItemUpdate(listName, item, operation);
-  };
-
-  
-  const deleteItem = (listName, item) => {
-    if (window.confirm(`Are you sure you want to delete "${item.text || item.name}"?`)) {
-      handleItemUpdate(listName, item, 'delete');
-    }
-  };
-
-  const startEditing = (listName, item) => {
-    setEditingItem({ listName, itemId: item.id });
-    setEditText(item.text || item.name || '');
-  };
-
-  
-  const saveEdit = async (listName, item) => {
-    if (editText.trim() !== item.text) {
-      await handleItemUpdate(listName, item, 'edit', editText.trim());
-    }
-    setEditingItem(null);
-    setEditText('');
-  };
-
-  // Cancel editing
-  const cancelEdit = () => {
-    setEditingItem(null);
-    setEditText('');
-  };
-
-  const deleteList = (listName) => {
-    if (window.confirm(`Are you sure you want to delete the entire list "${listName}"? This will remove all items in the list.`)) {
       if (onDeleteList) {
-        console.log(`🗑️ Deleting list: ${listName}`);
         onDeleteList({
           type: 'delete_list',
           data: { name: listName }
         });
-      } else {
-        console.warn('onDeleteList handler not provided');
       }
     }
+  }, [onDeleteList]);
+
+  // ===== EVENT FUNCTIONS =====
+  const getEventTitle = (event) => {
+    return event.title || event.eventTitle || event.name || event.summary || 'Untitled Event';
   };
 
-
-  //Schedule
-  const deleteSchedule = (scheduleName) => {
-    if (window.confirm(`Are you sure you want to delete the entire schedule "${scheduleName}"? This will remove all events in the schedule.`)) {
-      if (onDeleteSchedule) {
-        console.log(`🗑️ Deleting schedule: ${scheduleName}`);
-        onDeleteSchedule({
-          type: 'delete_schedule',
-          data: { name: scheduleName }
-        });
-      } else {
-        console.warn('onDeleteSchedule handler not provided');
+  const getEventTime = (event) => {
+    if (event.startTime) {
+      const time = new Date(event.startTime);
+      if (!isNaN(time.getTime())) {
+        return time.toLocaleString();
       }
     }
+    return event.time || event.eventTime || 'Time not set';
   };
 
-    // NEW: Delete individual event
-    const deleteEvent = (scheduleName, event) => {
-      const eventTitle = event.title || event.event_title || 'this event';
-      if (window.confirm(`Are you sure you want to delete "${eventTitle}"?`)) {
-        if (onDeleteEvent) {
-          console.log(`🗑️ Deleting event: ${event.id} from ${scheduleName}`);
-          onDeleteEvent({
-            type: 'delete_event',
-            data: { 
-              scheduleName: scheduleName,
-              eventId: event.id 
-            }
-          });
-        } else {
-          console.warn('onDeleteEvent handler not provided');
-        }
-      }
-    };
-  
-    // NEW: Start editing an event
-    const startEditingEvent = useCallback((scheduleName, event) => {
-      console.log('📝 Starting to edit event:', event);
-      
-      // Set the editing state
-      isEditingRef.current = true;
-      setEditingEvent({ scheduleName, eventId: event.id });
-      
-      const editData = {
-        title: getEventTitle(event),
-        description: getEventDescription(event),
-        startTime: formatDateTimeForInput(getEventStartTime(event)),
-        endTime: formatDateTimeForInput(getEventEndTime(event)),
-        location: event.location || ''
-      };
-      
-      console.log('📝 Edit data prepared:', editData);
-      setEditEventData(editData);
-    }, []);
-  
-    //
-    const saveEditedEvent = useCallback(async () => {
-      if (!onEditEvent || !editingEvent) {
-        console.warn('onEditEvent handler not provided or no event being edited');
-        return;
-      }
-    
-      try {
-        console.log(`📝 Saving edited event: ${editingEvent.eventId}`);
-        console.log(`📝 Raw edit data:`, editEventData);
-        
-        // Prepare updates with proper timezone handling
-        const updates = {};
-        
-        // Always include title if it exists
-        if (editEventData.title !== undefined) {
-          updates.title = editEventData.title.trim();
-        }
-        
-        // Include description (allow empty string to clear it)
-        if (editEventData.description !== undefined) {
-          updates.description = editEventData.description.trim();
-        }
-        
-        // FIXED: Handle start time with proper timezone conversion
-        if (editEventData.startTime) {
-          const startTimeISO = convertLocalDateTimeToISO(editEventData.startTime);
-          if (startTimeISO) {
-            updates.startTime = startTimeISO;
-            console.log(`📅 Converted start time: ${editEventData.startTime} → ${startTimeISO}`);
-          }
-        }
-        
-        // FIXED: Handle end time with proper timezone conversion
-        if (editEventData.endTime !== undefined) {
-          if (editEventData.endTime.trim() === '') {
-            updates.endTime = null; // Clear the end time
-            console.log(`📅 Clearing end time`);
-          } else {
-            const endTimeISO = convertLocalDateTimeToISO(editEventData.endTime);
-            if (endTimeISO) {
-              updates.endTime = endTimeISO;
-              console.log(`📅 Converted end time: ${editEventData.endTime} → ${endTimeISO}`);
-            }
-          }
-        }
-        
-        // Include location (allow empty string to clear it)
-        if (editEventData.location !== undefined) {
-          updates.location = editEventData.location.trim();
-        }
-        
-        console.log(`📝 Final prepared updates:`, updates);
-        
-        // Call the edit handler
-        await onEditEvent({
-          type: 'edit_event',
-          data: {
-            scheduleName: editingEvent.scheduleName,
-            eventId: editingEvent.eventId,
-            updates: updates
-          }
-        });
-        
-        // Reset editing state
-        setEditingEvent(null);
-        setEditEventData({});
-        isEditingRef.current = false;
-        
-        console.log('✅ Event saved successfully');
-        
-      } catch (error) {
-        console.error('❌ Error saving event:', error);
-        // Don't reset the editing state if there's an error, so user can try again
-      }
-    }, [onEditEvent, editingEvent, editEventData]);
+  const getEventDescription = (event) => {
+    return event.description || event.eventDescription || event.details || '';
+  };
 
-    const updateEventField = useCallback((field, value) => {
-      console.log(`📝 Updating field ${field} to:`, value);
-      setEditEventData(prev => ({
-        ...prev,
-        [field]: value
-      }));
-    }, []);
-  
-    const cancelEditingEvent = useCallback(() => {
-      console.log('❌ Cancelling event edit');
-      setEditingEvent(null);
-      setEditEventData({});
-      isEditingRef.current = false;
-    }, []);
-
-  
-
-  //Memory
-  // Add memory editing functions
-  const startEditingMemoryItem = useCallback((categoryName, item) => {
-    console.log('📝 Starting to edit memory item:', item);
-    
-    setEditingMemoryItem({ categoryName, itemId: item.id });
-    
-    // Prepare edit data based on item structure
-    const editData = {
-      key: item.key || item.memoryKey || item.label || item.name || '',
-      value: item.value || item.memoryValue || item.content || item.text || ''
-    };
-    
-    console.log('📝 Memory edit data prepared:', editData);
-    setEditMemoryData(editData);
+  const startEditingEvent = useCallback((scheduleName, event) => {
+    console.log(`📝 Starting edit for event in schedule: ${scheduleName}`, event);
+    setEditingEvent({ scheduleName, eventId: event.id });
+    setEditEventData({
+      title: getEventTitle(event),
+      time: getEventTime(event),
+      description: getEventDescription(event),
+      location: event.location || ''
+    });
   }, []);
-  
-  const saveEditingMemoryItem = useCallback(async () => {
-    if (!editingMemoryItem || !onUpdateMemoryItem) {
-      console.error('❌ No memory item being edited or no update handler');
+
+  const saveEditingEvent = useCallback(async () => {
+    if (!editEventData.title?.trim()) {
+      cancelEditingEvent();
       return;
     }
     
     try {
-      console.log('💾 Saving memory item changes...');
+      console.log('💾 Saving event edit:', editEventData);
       
-      // Prepare updates object
+      const updates = {
+        title: editEventData.title.trim(),
+        time: editEventData.time,
+        description: editEventData.description || '',
+        location: editEventData.location || ''
+      };
+      
+      if (onUpdateEvent) {
+        await onUpdateEvent({
+          type: 'update_event',
+          data: {
+            scheduleName: editingEvent.scheduleName,
+            eventId: editingEvent.eventId,
+            operation: 'edit',
+            updates
+          }
+        });
+      }
+      
+      setEditingEvent(null);
+      setEditEventData({});
+      
+    } catch (error) {
+      console.error('❌ Error saving event:', error);
+    }
+  }, [onUpdateEvent, editingEvent, editEventData]);
+
+  const cancelEditingEvent = useCallback(() => {
+    console.log('❌ Cancelling event edit');
+    setEditingEvent(null);
+    setEditEventData({});
+  }, []);
+
+  const updateEventField = useCallback((field, value) => {
+    setEditEventData(prev => ({
+      ...prev,
+      [field]: value
+    }));
+  }, []);
+
+  const deleteEvent = useCallback((scheduleName, event) => {
+    const eventName = getEventTitle(event);
+    
+    if (window.confirm(`Are you sure you want to delete "${eventName}"?`)) {
+      console.log(`🗑️ Deleting event from schedule: ${scheduleName}`, event);
+      
+      if (onDeleteEvent) {
+        onDeleteEvent({
+          type: 'delete_event',
+          data: {
+            scheduleName,
+            eventId: event.id
+          }
+        });
+      }
+    }
+  }, [onDeleteEvent]);
+
+  const deleteSchedule = useCallback((scheduleName) => {
+    if (window.confirm(`Are you sure you want to delete the entire schedule "${scheduleName}"? This will remove all events in this schedule.`)) {
+      console.log(`🗑️ Deleting entire schedule: ${scheduleName}`);
+      
+      if (onDeleteSchedule) {
+        onDeleteSchedule({
+          type: 'delete_schedule',
+          data: { name: scheduleName }
+        });
+      }
+    }
+  }, [onDeleteSchedule]);
+
+  // ===== MEMORY FUNCTIONS =====
+  const startEditingMemoryItem = useCallback((categoryName, item) => {
+    console.log(`📝 Starting edit for memory item in category: ${categoryName}`, item);
+    setEditingMemoryItem({ categoryName, itemId: item.id });
+    setEditMemoryData({
+      key: item.key || item.memoryKey || '',
+      value: item.value || item.memoryValue || ''
+    });
+  }, []);
+
+  const saveEditingMemoryItem = useCallback(async () => {
+    try {
       const updates = {};
       
-      if (editMemoryData.key !== undefined) {
+      if (editMemoryData.key && editMemoryData.key.trim()) {
         updates.key = editMemoryData.key.trim();
         updates.memoryKey = editMemoryData.key.trim(); // For compatibility
       }
       
-      if (editMemoryData.value !== undefined) {
+      if (editMemoryData.value && editMemoryData.value.trim()) {
         updates.value = editMemoryData.value.trim();
         updates.memoryValue = editMemoryData.value.trim(); // For compatibility
       }
       
       console.log('📝 Final memory updates:', updates);
       
-      // Call the update handler
-      await onUpdateMemoryItem({
-        type: 'update_memory',
-        data: {
-          categoryName: editingMemoryItem.categoryName,
-          itemId: editingMemoryItem.itemId,
-          operation: 'edit',
-          updates: updates
-        }
-      });
+      if (onUpdateMemoryItem) {
+        await onUpdateMemoryItem({
+          type: 'update_memory',
+          data: {
+            categoryName: editingMemoryItem.categoryName,
+            itemId: editingMemoryItem.itemId,
+            operation: 'edit',
+            updates: updates
+          }
+        });
+      }
       
-      // Reset editing state
       setEditingMemoryItem(null);
       setEditMemoryData({});
       
@@ -474,7 +337,6 @@ const ContentDisplay = ({
       
     } catch (error) {
       console.error('❌ Error saving memory item:', error);
-      // Don't reset the editing state if there's an error
     }
   }, [onUpdateMemoryItem, editingMemoryItem, editMemoryData]);
 
@@ -492,12 +354,13 @@ const ContentDisplay = ({
     setEditMemoryData({});
   }, []);
 
-  // Delete functions
-  const deleteMemoryItem = (categoryName, item) => {
+  const deleteMemoryItem = useCallback((categoryName, item) => {
     const itemName = item.key || item.memoryKey || item.label || 'this memory';
+    
     if (window.confirm(`Are you sure you want to delete "${itemName}"?`)) {
+      console.log(`🗑️ Deleting memory item: ${item.id} from ${categoryName}`);
+      
       if (onDeleteMemoryItem) {
-        console.log(`🗑️ Deleting memory item: ${item.id} from ${categoryName}`);
         onDeleteMemoryItem({
           type: 'delete_memory_item',
           data: { 
@@ -505,69 +368,37 @@ const ContentDisplay = ({
             itemId: item.id 
           }
         });
-      } else {
-        console.warn('onDeleteMemoryItem handler not provided');
       }
     }
-  };
+  }, [onDeleteMemoryItem]);
 
-  const deleteMemory = (categoryName) => {
+  const deleteMemory = useCallback((categoryName) => {
     if (window.confirm(`Are you sure you want to delete the entire memory category "${categoryName}"? This will remove all information in this category.`)) {
+      console.log(`🗑️ Deleting memory category: ${categoryName}`);
+      
       if (onDeleteMemory) {
-        console.log(`🗑️ Deleting memory category: ${categoryName}`);
         onDeleteMemory({
           type: 'delete_memory',
           data: { name: categoryName }
         });
-      } else {
-        console.warn('onDeleteMemory handler not provided');
       }
     }
-  };
+  }, [onDeleteMemory]);
 
-
-  // Empty state component - no need for separate file
-  const EmptyState = ({ mode }) => {
-    const emptyMessages = {
-      chat: {
-        title: "👋 नमस्ते! Start a conversation",
-        subtitle: "Record your voice and I'll help you manage your tasks!",
-        hint: "Try saying: 'Hello, how are you?' or 'Create a shopping list'"
-      },
-      lists: {
-        title: "📝 No lists created yet",
-        subtitle: "Create your first list by speaking!",
-        hint: "Try saying: 'Create a shopping list' or 'Make a todo list'"
-      },
-      schedule: {
-        title: "📅 No events scheduled",
-        subtitle: "Add your first appointment!",
-        hint: "Try saying: 'I have a meeting tomorrow at 3 PM'"
-      },
-      memory: {
-        title: "🧠 Memory bank is empty",
-        subtitle: "Store important information!",
-        hint: "Try saying: 'Remember that John's phone is 555-1234'"
-      }
-    };
-
-    const msg = emptyMessages[mode] || emptyMessages.chat;
-    
-    return (
-      <div className="empty-state">
-        <h3>{msg.title}</h3>
-        <p>{msg.subtitle}</p>
-        <div className="empty-state-hint">
-          <small>💡 {msg.hint}</small>
-        </div>
-      </div>
-    );
-  };
-
-  // Chat display
+  // ===== RENDER FUNCTIONS =====
   const renderChatContent = () => {
+    console.log('🔍 Rendering chat content, messages:', messages?.length);
+    
     if (!messages || messages.length === 0) {
-      return <EmptyState mode="chat" />;
+      return (
+        <div className="empty-state">
+          <h3>👋 Start a conversation</h3>
+          <p>Record your voice and I'll help you manage your tasks!</p>
+          <div className="empty-state-hint">
+            <small>💡 Try saying: 'Hello, how are you?' or 'Create a shopping list'</small>
+          </div>
+        </div>
+      );
     }
 
     return (
@@ -602,6 +433,8 @@ const ContentDisplay = ({
   };
 
   const renderListsContent = () => {
+    console.log('🔍 Rendering lists content, userLists:', userLists);
+    
     const hasLists = userLists && Object.keys(userLists).length > 0;
     
     return (
@@ -689,9 +522,9 @@ const ContentDisplay = ({
     );
   };
 
-
-  // Schedule display
   const renderSchedulesContent = () => {
+    console.log('🔍 Rendering schedules content, userSchedules:', userSchedules);
+    
     const hasSchedules = userSchedules && Object.keys(userSchedules).length > 0;
     
     return (
@@ -699,7 +532,7 @@ const ContentDisplay = ({
         {!hasSchedules ? (
           <div className="empty-state">
             <h3>📅 No schedules yet</h3>
-            <p>Create your first schedule by saying "I have a meeting tomorrow at 3 PM"</p>
+            <p>Create your first schedule by saying "I have a meeting tomorrow"</p>
           </div>
         ) : (
           <>
@@ -726,78 +559,68 @@ const ContentDisplay = ({
                       return (
                         <div key={event.id || index} className="schedule-item">
                           {isEditingThisEvent ? (
-                            // Edit mode with proper event handlers
-                            <div className="edit-event-form">
+                            <div className="event-edit-form">
                               <input
                                 type="text"
-                                placeholder="Event title"
                                 value={editEventData.title || ''}
                                 onChange={(e) => updateEventField('title', e.target.value)}
-                                className="edit-event-title"
+                                placeholder="Event title"
+                                className="edit-input"
                               />
-                              
-                              <label>Start Time:</label>
-                              <input
-                                type="datetime-local"
-                                value={editEventData.startTime || ''}
-                                onChange={(e) => updateEventField('startTime', e.target.value)}
-                                className="edit-event-time"
-                              />
-                              
-                              <label>End Time (optional):</label>
-                              <input
-                                type="datetime-local"
-                                value={editEventData.endTime || ''}
-                                onChange={(e) => updateEventField('endTime', e.target.value)}
-                                className="edit-event-time"
-                              />
-                              
                               <input
                                 type="text"
-                                placeholder="Location (optional)"
+                                value={editEventData.time || ''}
+                                onChange={(e) => updateEventField('time', e.target.value)}
+                                placeholder="Event time"
+                                className="edit-input"
+                              />
+                              <input
+                                type="text"
                                 value={editEventData.location || ''}
                                 onChange={(e) => updateEventField('location', e.target.value)}
-                                className="edit-event-location"
+                                placeholder="Location (optional)"
+                                className="edit-input"
                               />
-                              
                               <textarea
-                                placeholder="Description (optional)"
                                 value={editEventData.description || ''}
                                 onChange={(e) => updateEventField('description', e.target.value)}
-                                className="edit-event-description"
-                                rows="3"
+                                placeholder="Description (optional)"
+                                className="edit-textarea"
+                                rows="2"
                               />
-                              
-                              <div className="edit-event-actions">
-                                <button onClick={saveEditedEvent} className="save-btn">
-                                  💾 Save
+                              <div className="schedule-item-actions">
+                                <button 
+                                  onClick={saveEditingEvent} 
+                                  className="save-btn"
+                                  title="Save changes"
+                                >
+                                  ✅
                                 </button>
-                                <button onClick={cancelEditingEvent} className="cancel-btn">
-                                  ❌ Cancel
+                                <button 
+                                  onClick={cancelEditingEvent} 
+                                  className="cancel-btn"
+                                  title="Cancel editing"
+                                >
+                                  ❌
                                 </button>
                               </div>
                             </div>
                           ) : (
-                            // IMPROVED: View mode with better field handling
                             <>
-                              <div className="schedule-item-main">
+                              <div className="schedule-item-content">
                                 <div className="schedule-item-title">
                                   {getEventTitle(event)}
                                 </div>
-                                
-                                {/* FIXED: Always show time if available, using improved formatting */}
                                 <div className="schedule-item-time">
-                                  📅 {formatEventTime(getEventStartTime(event), getEventEndTime(event))}
+                                  📅 {getEventTime(event)}
                                 </div>
                                 
-                                {/* FIXED: Show location if it exists */}
                                 {event.location && (
                                   <div className="schedule-item-location">
                                     📍 {event.location}
                                   </div>
                                 )}
                                 
-                                {/* FIXED: Show description if it exists */}
                                 {getEventDescription(event) && (
                                   <div className="schedule-item-description">
                                     {getEventDescription(event)}
@@ -836,8 +659,9 @@ const ContentDisplay = ({
     );
   };
 
-  // Memory display
   const renderMemoryContent = () => {
+    console.log('🔍 Rendering memory content, userMemory:', userMemory);
+    
     const hasMemory = userMemory && Object.keys(userMemory).length > 0;
     
     return (
@@ -857,103 +681,61 @@ const ContentDisplay = ({
                 count={category.items?.length || 0}
                 subtitle={`Created ${formatDate(category.created)}`}
                 defaultExpanded={true}
+                showDeleteButton={true}
                 onDelete={() => deleteMemory(category.name || categoryId)}
               >
                 {!category.items || category.items.length === 0 ? (
                   <div className="empty-memory-message">
-                    No information stored.
+                    No information stored. Add memories by saying "Remember that..."
                   </div>
                 ) : (
                   <div className="memory-items">
                     {category.items.map((item, index) => {
-                      const isEditing = editingMemoryItem?.categoryName === (category.name || categoryId) && 
-                                       editingMemoryItem?.itemId === item.id;
-                      
-                      // Determine what content to show
-                      let displayContent;
-                      let displayLabel;
-                      
-                      if (typeof item === 'string') {
-                        displayContent = item;
-                        displayLabel = null;
-                      } else if (item && typeof item === 'object') {
-                        displayLabel = item.key || item.memoryKey || item.label || item.name;
-                        displayContent = item.value || item.memoryValue || item.content || item.text || 'Stored information';
-                        
-                        if (typeof displayContent === 'object') {
-                          displayContent = JSON.stringify(displayContent, null, 2);
-                        }
-                      } else {
-                        displayContent = 'Stored information';
-                        displayLabel = null;
-                      }
+                      const isEditingThisItem = editingMemoryItem?.categoryName === (category.name || categoryId) && editingMemoryItem?.itemId === item.id;
                       
                       return (
                         <div key={item.id || index} className="memory-item">
-                          <div className="memory-item-icon">💭</div>
+                          <div className="memory-item-icon">🧠</div>
+                          
                           <div className="memory-item-content">
-                            {/* Editable label */}
-                            {displayLabel && displayLabel !== displayContent && (
-                              <div className="memory-item-label">
-                                {isEditing ? (
-                                  <input
-                                    type="text"
-                                    value={editMemoryData.key || ''}
-                                    onChange={(e) => updateMemoryField('key', e.target.value)}
-                                    placeholder="Memory label..."
-                                    className="edit-input"
-                                  />
-                                ) : (
-                                  <strong>{displayLabel}:</strong>
-                                )}
-                              </div>
-                            )}
-                            
-                            {/* Editable content */}
-                            <div className="memory-item-value">
-                              {isEditing ? (
-                                <textarea
+                            {isEditingThisItem ? (
+                              <div className="memory-edit-form">
+                                <input
+                                  type="text"
+                                  value={editMemoryData.key || ''}
+                                  onChange={(e) => updateMemoryField('key', e.target.value)}
+                                  placeholder="Memory key/label"
+                                  className="edit-input"
+                                />
+                                <input
+                                  type="text"
                                   value={editMemoryData.value || ''}
                                   onChange={(e) => updateMemoryField('value', e.target.value)}
-                                  placeholder="Memory content..."
-                                  className="edit-textarea"
-                                  rows="3"
-                                  onKeyPress={(e) => {
-                                    if (e.key === 'Enter' && e.ctrlKey) {
-                                      saveEditingMemoryItem();
-                                    } else if (e.key === 'Escape') {
-                                      cancelEditingMemoryItem();
-                                    }
-                                  }}
+                                  placeholder="Memory value/details"
+                                  className="edit-input"
                                 />
-                              ) : (
-                                displayContent
-                              )}
-                            </div>
-                            
-                            {/* Show metadata if available and not editing */}
-                            {!isEditing && item && typeof item === 'object' && item.created && (
-                              <div className="memory-item-meta">
-                                Stored {formatDate(item.created)}
+                              </div>
+                            ) : (
+                              <div className="memory-text">
+                                <strong>{item.key || item.memoryKey || 'Memory'}:</strong> {item.value || item.memoryValue || 'No details'}
                               </div>
                             )}
                           </div>
                           
-                          {/* Action buttons */}
                           <div className="memory-item-actions">
-                            {isEditing ? (
+                            {isEditingThisItem ? (
                               <>
                                 <button 
                                   onClick={saveEditingMemoryItem} 
                                   className="save-btn"
-                                  title="Save changes (Ctrl+Enter)"
+                                  title="Save changes"
                                 >
                                   ✅
                                 </button>
                                 <button 
                                   onClick={cancelEditingMemoryItem} 
                                   className="cancel-btn"
-                                  title="Cancel editing (Esc)"
+                                  title="Cancel editing"
                                 >
                                   ❌
                                 </button>
@@ -990,7 +772,7 @@ const ContentDisplay = ({
     );
   };
 
-  // Main render method
+  // ===== MAIN RENDER =====
   if (isDataLoading) {
     return (
       <div className="loading-state">
@@ -999,6 +781,8 @@ const ContentDisplay = ({
       </div>
     );
   }
+
+  console.log(`🎨 Rendering ContentDisplay with mode: "${currentMode}"`);
 
   switch (currentMode) {
     case 'lists':
@@ -1010,26 +794,8 @@ const ContentDisplay = ({
     case 'chat':
       return renderChatContent();
     default:
-      return (
-        <div className="chat-content">
-          {messages.length === 0 ? (
-            <div className="empty-state">
-              <h3>💬 Start a conversation</h3>
-              <p>Ask me to create lists, schedule events, or store memories!</p>
-            </div>
-          ) : (
-            <div className="messages-display">
-              {messages.map((message, index) => (
-                <div key={index} className={`message ${message.type}-message`}>
-                  <strong>{message.type === 'user' ? 'You' : 'AI'}:</strong>
-                  <span>{message.text}</span>
-                  <small>{formatDate(message.timestamp)}</small>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      );
+      console.warn(`⚠️ Unknown mode: ${currentMode}, falling back to chat`);
+      return renderChatContent();
   }
 };
 

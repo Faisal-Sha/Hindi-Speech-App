@@ -405,18 +405,21 @@ function App() {
       {/* Content Display */}
       <ContentDisplay
         currentMode={currentMode}
+        messages={messages}
         userLists={userLists}
         userSchedules={userSchedules}
         userMemory={userMemory}
-        messages={messages}
-        language={currentLanguage} 
-        // Manual UI action handlers (for direct button clicks)
-        onDeleteList={handleDeleteList}
+        isDataLoading={isDataLoading}
+        // List action handlers
         onUpdateListItem={handleUpdateListItem}
         onDeleteListItem={handleDeleteListItem}
-        onDeleteSchedule={handleDeleteSchedule}
+        onDeleteList={handleDeleteList}
+        // Schedule action handlers
+        
+        onUpdateEvent={handleEditEvent}
         onDeleteEvent={handleDeleteEvent}
-        onEditEvent={handleEditEvent}
+        onDeleteSchedule={handleDeleteSchedule}
+        // Memory action handlers
         onUpdateMemoryItem={handleUpdateMemoryItem}
         onDeleteMemoryItem={handleDeleteMemoryItem}
         onDeleteMemory={handleDeleteMemory}
