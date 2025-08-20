@@ -100,13 +100,20 @@ const ContentDisplay = ({
     console.log(`🔄 Toggling completion for item in list: ${listName}`, item);
     
     if (onUpdateListItem) {
+      // Send smart action format
       onUpdateListItem({
-        type: 'update_list_item',
+        type: 'smart_update',
+        intent: `toggling completion for item in ${listName}`,
         data: {
-          listName,
-          itemId: item.id,
-          operation: 'toggle_completion',
-          updates: { completed: !item.completed }
+          target: listName,
+          operation: 'update_item',
+          values: [],
+          metadata: {
+            itemId: item.id,
+            updates: { completed: !item.completed },
+            listName: listName,
+            confidence: 'high'
+          }
         }
       });
     }
@@ -128,13 +135,20 @@ const ContentDisplay = ({
     console.log(`💾 Saving edit for item in list: ${listName}`);
     
     if (onUpdateListItem) {
+      // Send smart action format
       await onUpdateListItem({
-        type: 'update_list_item',
+        type: 'smart_update',
+        intent: `updating text for item in ${listName}`,
         data: {
-          listName,
-          itemId: item.id,
-          operation: 'edit',
-          updates: { text: editText.trim() }
+          target: listName,
+          operation: 'update_item',
+          values: [],
+          metadata: {
+            itemId: item.id,
+            updates: { text: editText.trim() },
+            listName: listName,
+            confidence: 'high'
+          }
         }
       });
     }
@@ -158,11 +172,19 @@ const ContentDisplay = ({
       console.log(`🗑️ Deleting item from list: ${listName}`, item);
       
       if (onDeleteListItem) {
+        // Send smart action format
         onDeleteListItem({
-          type: 'delete_list_item',
+          type: 'smart_delete',
+          intent: `deleting item from ${listName}`,
           data: {
-            listName,
-            itemId: item.id
+            target: listName,
+            operation: 'delete_item',
+            values: [],
+            metadata: {
+              itemId: item.id,
+              listName: listName,
+              confidence: 'high'
+            }
           }
         });
       }
@@ -174,9 +196,18 @@ const ContentDisplay = ({
       console.log(`🗑️ Deleting entire list: ${listName}`);
       
       if (onDeleteList) {
+        // Send smart action format
         onDeleteList({
-          type: 'delete_list',
-          data: { name: listName }
+          type: 'smart_delete',
+          intent: `deleting entire list ${listName}`,
+          data: {
+            target: listName,
+            operation: 'delete_list',
+            values: [],
+            metadata: {
+              confidence: 'high'
+            }
+          }
         });
       }
     }
@@ -229,13 +260,20 @@ const ContentDisplay = ({
       };
       
       if (onUpdateEvent) {
+        // Send smart action format
         await onUpdateEvent({
-          type: 'update_event',
+          type: 'smart_update',
+          intent: `updating event in ${editingEvent.scheduleName}`,
           data: {
-            scheduleName: editingEvent.scheduleName,
-            eventId: editingEvent.eventId,
-            operation: 'edit',
-            updates
+            target: editingEvent.scheduleName,
+            operation: 'update_event',
+            values: [],
+            metadata: {
+              eventId: editingEvent.eventId,
+              updates: updates,
+              scheduleName: editingEvent.scheduleName,
+              confidence: 'high'
+            }
           }
         });
       }
@@ -268,11 +306,19 @@ const ContentDisplay = ({
       console.log(`🗑️ Deleting event from schedule: ${scheduleName}`, event);
       
       if (onDeleteEvent) {
+        // Send smart action format
         onDeleteEvent({
-          type: 'delete_event',
+          type: 'smart_delete',
+          intent: `deleting event from ${scheduleName}`,
           data: {
-            scheduleName,
-            eventId: event.id
+            target: scheduleName,
+            operation: 'delete_event',
+            values: [],
+            metadata: {
+              eventId: event.id,
+              scheduleName: scheduleName,
+              confidence: 'high'
+            }
           }
         });
       }
@@ -284,13 +330,23 @@ const ContentDisplay = ({
       console.log(`🗑️ Deleting entire schedule: ${scheduleName}`);
       
       if (onDeleteSchedule) {
+        // Send smart action format
         onDeleteSchedule({
-          type: 'delete_schedule',
-          data: { name: scheduleName }
+          type: 'smart_delete',
+          intent: `deleting entire schedule ${scheduleName}`,
+          data: {
+            target: scheduleName,
+            operation: 'delete_schedule',
+            values: [],
+            metadata: {
+              confidence: 'high'
+            }
+          }
         });
       }
     }
   }, [onDeleteSchedule]);
+  
 
   // ===== MEMORY FUNCTIONS =====
   const startEditingMemoryItem = useCallback((categoryName, item) => {
@@ -319,13 +375,20 @@ const ContentDisplay = ({
       console.log('📝 Final memory updates:', updates);
       
       if (onUpdateMemoryItem) {
+        // Send smart action format
         await onUpdateMemoryItem({
-          type: 'update_memory',
+          type: 'smart_update',
+          intent: `updating memory item in ${editingMemoryItem.categoryName}`,
           data: {
-            categoryName: editingMemoryItem.categoryName,
-            itemId: editingMemoryItem.itemId,
-            operation: 'edit',
-            updates: updates
+            target: editingMemoryItem.categoryName,
+            operation: 'update_memory',
+            values: [],
+            metadata: {
+              itemId: editingMemoryItem.itemId,
+              updates: updates,
+              categoryName: editingMemoryItem.categoryName,
+              confidence: 'high'
+            }
           }
         });
       }
@@ -361,11 +424,19 @@ const ContentDisplay = ({
       console.log(`🗑️ Deleting memory item: ${item.id} from ${categoryName}`);
       
       if (onDeleteMemoryItem) {
+        // Send smart action format
         onDeleteMemoryItem({
-          type: 'delete_memory_item',
-          data: { 
-            categoryName: categoryName,
-            itemId: item.id 
+          type: 'smart_delete',
+          intent: `deleting memory item from ${categoryName}`,
+          data: {
+            target: categoryName,
+            operation: 'delete_memory_item',
+            values: [],
+            metadata: {
+              itemId: item.id,
+              categoryName: categoryName,
+              confidence: 'high'
+            }
           }
         });
       }
@@ -373,13 +444,22 @@ const ContentDisplay = ({
   }, [onDeleteMemoryItem]);
 
   const deleteMemory = useCallback((categoryName) => {
-    if (window.confirm(`Are you sure you want to delete the entire memory category "${categoryName}"? This will remove all information in this category.`)) {
-      console.log(`🗑️ Deleting memory category: ${categoryName}`);
+    if (window.confirm(`Are you sure you want to delete the entire memory category "${categoryName}"? This will remove all memories in this category.`)) {
+      console.log(`🗑️ Deleting entire memory category: ${categoryName}`);
       
       if (onDeleteMemory) {
+        // Send smart action format
         onDeleteMemory({
-          type: 'delete_memory',
-          data: { name: categoryName }
+          type: 'smart_delete',
+          intent: `deleting entire memory category ${categoryName}`,
+          data: {
+            target: categoryName,
+            operation: 'delete_memory',
+            values: [],
+            metadata: {
+              confidence: 'high'
+            }
+          }
         });
       }
     }

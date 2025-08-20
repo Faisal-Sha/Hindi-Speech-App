@@ -206,111 +206,273 @@ function App() {
   // These handle direct UI actions (like clicking edit/delete buttons)
   // They use handleAiActions for immediate UI updates + backend notification
   
-  const handleDeleteList = async (action) => {
+  const handleDeleteList = async (smartAction) => {
     if (!currentUser) return;
     try {
-      console.log('🗑️ Manual list deletion:', action);
-      await handleAiActions([action], currentUser.user_id);
-      // Also notify backend for persistence
-      await notifyBackendOfAction(action);
+      console.log('🗑️ Manual list deletion (smart action):', smartAction);
+      
+      // Send directly to backend using the enhanced endpoint
+      const response = await fetch(`http://localhost:3001/save-data-enhanced`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          userId: currentUser.user_id,
+          actions: [smartAction]
+        })
+      });
+  
+      if (response.ok) {
+        const result = await response.json();
+        console.log('✅ List deletion successful:', result);
+        // Reload data to reflect changes
+        await loadUserData(currentUser.user_id);
+      } else {
+        throw new Error(`Backend error: ${response.status}`);
+      }
     } catch (error) {
       console.error('❌ Error deleting list:', error);
     }
   };
-
-  const handleUpdateListItem = async (action) => {
+  
+  const handleUpdateListItem = async (smartAction) => {
     if (!currentUser) return;
     try {
-      console.log('📝 Manual list item update:', action);
-      await handleAiActions([action], currentUser.user_id);
-      // Also notify backend for persistence
-      await notifyBackendOfAction(action);
+      console.log('📝 Manual list item update (smart action):', smartAction);
+      
+      // Send directly to backend using the enhanced endpoint
+      const response = await fetch(`http://localhost:3001/save-data-enhanced`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          userId: currentUser.user_id,
+          actions: [smartAction]
+        })
+      });
+  
+      if (response.ok) {
+        const result = await response.json();
+        console.log('✅ List item update successful:', result);
+        // Reload data to reflect changes
+        await loadUserData(currentUser.user_id);
+      } else {
+        throw new Error(`Backend error: ${response.status}`);
+      }
     } catch (error) {
       console.error('❌ Error updating list item:', error);
     }
   };
-
-  const handleDeleteListItem = async (action) => {
+  
+  const handleDeleteListItem = async (smartAction) => {
     if (!currentUser) return;
     try {
-      console.log('🗑️ Manual list item deletion:', action);
-      await handleAiActions([action], currentUser.user_id);
-      // Also notify backend for persistence
-      await notifyBackendOfAction(action);
+      console.log('🗑️ Manual list item deletion (smart action):', smartAction);
+      
+      // Send directly to backend using the enhanced endpoint
+      const response = await fetch(`http://localhost:3001/save-data-enhanced`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          userId: currentUser.user_id,
+          actions: [smartAction]
+        })
+      });
+  
+      if (response.ok) {
+        const result = await response.json();
+        console.log('✅ List item deletion successful:', result);
+        // Reload data to reflect changes
+        await loadUserData(currentUser.user_id);
+      } else {
+        throw new Error(`Backend error: ${response.status}`);
+      }
     } catch (error) {
       console.error('❌ Error deleting list item:', error);
     }
   };
 
-  const handleDeleteSchedule = async (action) => {
+  const handleEditEvent = async (smartAction) => {
     if (!currentUser) return;
     try {
-      console.log('🗑️ Manual schedule deletion:', action);
-      await handleAiActions([action], currentUser.user_id);
-      // Also notify backend for persistence
-      await notifyBackendOfAction(action);
+      console.log('📝 Manual event edit (smart action):', smartAction);
+      
+      // Send directly to backend using the enhanced endpoint
+      const response = await fetch(`http://localhost:3001/save-data-enhanced`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          userId: currentUser.user_id,
+          actions: [smartAction]
+        })
+      });
+  
+      if (response.ok) {
+        const result = await response.json();
+        console.log('✅ Event edit successful:', result);
+        // Reload data to reflect changes
+        await loadUserData(currentUser.user_id);
+      } else {
+        throw new Error(`Backend error: ${response.status}`);
+      }
+    } catch (error) {
+      console.error('❌ Error editing event:', error);
+    }
+  };
+  
+  const handleDeleteEvent = async (smartAction) => {
+    if (!currentUser) return;
+    try {
+      console.log('🗑️ Manual event deletion (smart action):', smartAction);
+      
+      // Send directly to backend using the enhanced endpoint
+      const response = await fetch(`http://localhost:3001/save-data-enhanced`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          userId: currentUser.user_id,
+          actions: [smartAction]
+        })
+      });
+  
+      if (response.ok) {
+        const result = await response.json();
+        console.log('✅ Event deletion successful:', result);
+        // Reload data to reflect changes
+        await loadUserData(currentUser.user_id);
+      } else {
+        throw new Error(`Backend error: ${response.status}`);
+      }
+    } catch (error) {
+      console.error('❌ Error deleting event:', error);
+    }
+  };
+  
+  const handleDeleteSchedule = async (smartAction) => {
+    if (!currentUser) return;
+    try {
+      console.log('🗑️ Manual schedule deletion (smart action):', smartAction);
+      
+      // Send directly to backend using the enhanced endpoint
+      const response = await fetch(`http://localhost:3001/save-data-enhanced`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          userId: currentUser.user_id,
+          actions: [smartAction]
+        })
+      });
+  
+      if (response.ok) {
+        const result = await response.json();
+        console.log('✅ Schedule deletion successful:', result);
+        // Reload data to reflect changes
+        await loadUserData(currentUser.user_id);
+      } else {
+        throw new Error(`Backend error: ${response.status}`);
+      }
     } catch (error) {
       console.error('❌ Error deleting schedule:', error);
     }
   };
 
-  const handleDeleteEvent = async (action) => {
+  const handleUpdateMemoryItem = async (smartAction) => {
     if (!currentUser) return;
     try {
-      console.log('🗑️ Manual event deletion:', action);
-      await handleAiActions([action], currentUser.user_id);
-      // Also notify backend for persistence
-      await notifyBackendOfAction(action);
-    } catch (error) {
-      console.error('❌ Error deleting event:', error);
-    }
-  };
-
-  const handleEditEvent = async (action) => {
-    if (!currentUser) return;
-    try {
-      console.log('📝 Manual event edit:', action);
-      await handleAiActions([action], currentUser.user_id);
-      // Also notify backend for persistence
-      await notifyBackendOfAction(action);
-    } catch (error) {
-      console.error('❌ Error editing event:', error);
-    }
-  };
-
-  const handleUpdateMemoryItem = async (action) => {
-    if (!currentUser) return;
-    try {
-      console.log('📝 Manual memory item update:', action);
-      await handleAiActions([action], currentUser.user_id);
-      // Also notify backend for persistence
-      await notifyBackendOfAction(action);
+      console.log('📝 Manual memory item update (smart action):', smartAction);
+      
+      // Send directly to backend using the enhanced endpoint
+      const response = await fetch(`http://localhost:3001/save-data-enhanced`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          userId: currentUser.user_id,
+          actions: [smartAction]
+        })
+      });
+  
+      if (response.ok) {
+        const result = await response.json();
+        console.log('✅ Memory item update successful:', result);
+        // Reload data to reflect changes
+        await loadUserData(currentUser.user_id);
+      } else {
+        throw new Error(`Backend error: ${response.status}`);
+      }
     } catch (error) {
       console.error('❌ Error updating memory item:', error);
     }
   };
-
-  const handleDeleteMemoryItem = async (action) => {
+  
+  const handleDeleteMemoryItem = async (smartAction) => {
     if (!currentUser) return;
     try {
-      console.log('🗑️ Manual memory item deletion:', action);
-      await handleAiActions([action], currentUser.user_id);
-      // Also notify backend for persistence
-      await notifyBackendOfAction(action);
+      console.log('🗑️ Manual memory item deletion (smart action):', smartAction);
+      
+      // Send directly to backend using the enhanced endpoint
+      const response = await fetch(`http://localhost:3001/save-data-enhanced`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          userId: currentUser.user_id,
+          actions: [smartAction]
+        })
+      });
+  
+      if (response.ok) {
+        const result = await response.json();
+        console.log('✅ Memory item deletion successful:', result);
+        // Reload data to reflect changes
+        await loadUserData(currentUser.user_id);
+      } else {
+        throw new Error(`Backend error: ${response.status}`);
+      }
     } catch (error) {
       console.error('❌ Error deleting memory item:', error);
     }
   };
-
-  const handleDeleteMemory = async (action) => {
+  
+  const handleDeleteMemory = async (smartAction) => {
     if (!currentUser) return;
     try {
-      console.log('🗑️ Manual memory category deletion:', action);
-      await handleAiActions([action], currentUser.user_id);
-      // Also notify backend for persistence
-      await notifyBackendOfAction(action);
+      console.log('🗑️ Manual memory deletion (smart action):', smartAction);
+      
+      // Send directly to backend using the enhanced endpoint
+      const response = await fetch(`http://localhost:3001/save-data-enhanced`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          userId: currentUser.user_id,
+          actions: [smartAction]
+        })
+      });
+  
+      if (response.ok) {
+        const result = await response.json();
+        console.log('✅ Memory deletion successful:', result);
+        // Reload data to reflect changes
+        await loadUserData(currentUser.user_id);
+      } else {
+        throw new Error(`Backend error: ${response.status}`);
+      }
     } catch (error) {
-      console.error('❌ Error deleting memory category:', error);
+      console.error('❌ Error deleting memory:', error);
     }
   };
 

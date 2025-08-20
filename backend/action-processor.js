@@ -252,182 +252,263 @@ class EnhancedSmartActionProcessor {
     }
   
     /**
-     * Handle smart updates with AI matching and context understanding
-     */
-    async handleSmartUpdate(data, userId) {
-      const { target, operation, values, metadata } = data;
-      
-      console.log(`🔄 Smart updating: "${target}" with operation: ${operation}`);
-      
-      switch(operation) {
-        case 'prepare_edit':
-          // Just acknowledge that we're ready to edit - no actual changes yet
-          return {
-            success: true,
-            type: 'edit_prepared',
-            details: {
-              target,
-              message: 'Ready to edit. What changes would you like to make?'
-            }
-          };
-          
-        case 'edit_list':
-        case 'update_list':
-          const allLists = await this.db.getUserLists(userId);
-          const targetList = await this.aiMatcher.findBestListMatch(target, allLists);
-          
-          if (!targetList) {
-            return { 
-              success: false, 
-              error: `Could not find list matching "${target}"` 
-            };
-          }
-          
-          // Handle different types of list updates
-          if (values && values.length > 0) {
-            // Add new items to the list
-            for (const item of values) {
-              await this.db.addItemToList(userId, targetList, item);
-            }
-          }
-          
-          if (metadata?.removeItems) {
-            // Remove specified items
-            for (const itemToRemove of metadata.removeItems) {
-              // Find and remove matching items (this would need to be implemented in database functions)
-              console.log(`Removing item: ${itemToRemove} from ${targetList}`);
-              // You would implement item removal by text matching here
-            }
-          }
-          
-          if (metadata?.markCompleted) {
-            // Mark items as completed
-            for (const itemToComplete of metadata.markCompleted) {
-              console.log(`Marking completed: ${itemToComplete} in ${targetList}`);
-              // You would implement item completion here
-            }
-          }
-          
-          return {
-            success: true,
-            type: 'list_updated',
-            details: {
-              targetList,
-              originalRequest: target,
-              itemsAdded: values?.length || 0,
-              itemsRemoved: metadata?.removeItems?.length || 0,
-              itemsCompleted: metadata?.markCompleted?.length || 0,
-              aiDecision: true
-            }
-          };
-          
-        case 'edit_event':
-        case 'update_event':
-          const allSchedules = await this.db.getUserSchedules(userId);
-          const targetSchedule = await this.aiMatcher.findBestScheduleMatch(target, allSchedules);
-          
-          if (!targetSchedule) {
-            return { 
-              success: false, 
-              error: `Could not find schedule matching "${target}"` 
-            };
-          }
-          
-          // Handle event updates (this would need more sophisticated event matching)
-          if (metadata?.eventId && metadata?.updates) {
-            await this.db.updateEvent(userId, targetSchedule, metadata.eventId, metadata.updates);
-          }
-          
-          return {
-            success: true,
-            type: 'event_updated',
-            details: {
-              targetSchedule,
-              originalRequest: target,
-              aiDecision: true
-            }
-          };
-          
-        case 'edit_memory':
-        case 'update_memory':
-          const allMemory = await this.db.getUserMemories(userId);
-          const targetCategory = await this.aiMatcher.findBestMemoryMatch(target, allMemory);
-          
-          if (!targetCategory) {
-            return { 
-              success: false, 
-              error: `Could not find memory category matching "${target}"` 
-            };
-          }
-          
-          // Handle memory updates
-          if (metadata?.itemId && metadata?.updates) {
-            await this.db.updateMemoryItem(userId, targetCategory, metadata.itemId, metadata.updates);
-          }
-          
-          return {
-            success: true,
-            type: 'memory_updated',
-            details: {
-              targetCategory,
-              originalRequest: target,
-              aiDecision: true
-            }
-          };
-          
-        default:
-          return {
-            success: false,
-            error: `Unknown update operation: ${operation}`
-          };
-      }
-    }
+ * Handle smart updates with AI matching and context understanding
+ */
+async handleSmartUpdate(data, userId) {
+  const { target, operation, values, metadata } = data;
   
-    /**
-     * Handle smart deletion with AI matching
-     */
-    async handleSmartDelete(data, userId) {
-      const { target, operation, metadata } = data;
+  console.log(`🔄 Smart updating: "${target}" with operation: ${operation}`);
+  
+  switch(operation) {
+    case 'prepare_edit':
+      // Just acknowledge that we're ready to edit - no actual changes yet
+      return {
+        success: true,
+        type: 'edit_prepared',
+        details: {
+          target,
+          message: 'Ready to edit. What changes would you like to make?'
+        }
+      };
+
+    // ===== LIST ITEM OPERATIONS =====
+    case 'update_item':
+      // Handle list item updates (edit text or toggle completion)
+      const listName = metadata.listName || target;
       
-      console.log(`🗑️ Smart deleting: "${target}"`);
+      if (metadata.updates.text !== undefined) {
+        // Edit item text
+        console.log(`📝 Editing item ${metadata.itemId} in list "${listName}"`);
+        await this.db.updateListItemText(userId, listName, metadata.itemId, metadata.updates.text);
+        
+        return {
+          success: true,
+          type: 'list_item_updated',
+          details: { 
+            listName, 
+            itemId: metadata.itemId, 
+            operation: 'text_update',
+            newText: metadata.updates.text
+          }
+        };
+      }
       
-      if (operation === 'delete_list' || !operation) {
+      if (metadata.updates.completed !== undefined) {
+        // Toggle completion status
+        console.log(`🔄 Toggling completion for item ${metadata.itemId} in list "${listName}"`);
+        await this.db.updateListItemStatus(userId, listName, metadata.itemId, metadata.updates.completed);
+        
+        return {
+          success: true,
+          type: 'list_item_updated',
+          details: { 
+            listName, 
+            itemId: metadata.itemId, 
+            operation: 'completion_toggle',
+            completed: metadata.updates.completed
+          }
+        };
+      }
+      
+      return { success: false, error: 'No valid updates provided for list item' };
+
+    // ===== EVENT OPERATIONS =====
+    case 'update_event':
+      const scheduleName = metadata.scheduleName || target;
+      
+      console.log(`📝 Updating event ${metadata.eventId} in schedule "${scheduleName}"`);
+      await this.db.updateEvent(userId, scheduleName, metadata.eventId, metadata.updates);
+      
+      return {
+        success: true,
+        type: 'event_updated',
+        details: {
+          scheduleName,
+          eventId: metadata.eventId,
+          updates: metadata.updates
+        }
+      };
+
+    // ===== MEMORY OPERATIONS =====
+    case 'update_memory':
+      const categoryName = metadata.categoryName || target;
+      
+      console.log(`🧠 Updating memory item ${metadata.itemId} in category "${categoryName}"`);
+      await this.db.updateMemoryItem(userId, categoryName, metadata.itemId, metadata.updates);
+      
+      return {
+        success: true,
+        type: 'memory_updated',
+        details: {
+          categoryName,
+          itemId: metadata.itemId,
+          updates: metadata.updates
+        }
+      };
+
+    // ===== LEGACY OPERATIONS (for backward compatibility) =====
+    case 'edit_list':
+    case 'update_list':
+      const allLists = await this.db.getUserLists(userId);
+      const targetList = await this.aiMatcher.findBestListMatch(target, allLists);
+      
+      if (!targetList) {
+        return { 
+          success: false, 
+          error: `Could not find list matching "${target}"` 
+        };
+      }
+      
+      // Handle different types of list updates
+      if (values && values.length > 0) {
+        // Add new items to the list
+        for (const item of values) {
+          await this.db.addItemToList(userId, targetList, item);
+        }
+      }
+      
+      return {
+        success: true,
+        type: 'list_updated',
+        details: {
+          targetList,
+          originalRequest: target,
+          itemsAdded: values?.length || 0,
+          aiDecision: true
+        }
+      };
+
+    default:
+      return {
+        success: false,
+        error: `Unknown update operation: ${operation}`
+      };
+  }
+}
+
+/**
+ * Handle smart deletion with AI matching
+ */
+async handleSmartDelete(data, userId) {
+  const { target, operation, metadata } = data;
+  
+  console.log(`🗑️ Smart deleting: "${target}" with operation: ${operation}`);
+  
+  switch(operation) {
+    // ===== LIST OPERATIONS =====
+    case 'delete_item':
+      const listName = metadata.listName || target;
+      
+      console.log(`🗑️ Deleting item ${metadata.itemId} from list "${listName}"`);
+      await this.db.deleteListItem(userId, listName, metadata.itemId);
+      
+      return { 
+        success: true, 
+        type: 'list_item_deleted', 
+        details: { 
+          listName, 
+          itemId: metadata.itemId 
+        }
+      };
+
+    case 'delete_list':
+      console.log(`🗑️ Deleting entire list "${target}"`);
+      await this.db.deleteUserList(userId, target);
+      
+      return { 
+        success: true, 
+        type: 'list_deleted', 
+        details: { listName: target }
+      };
+
+    // ===== SCHEDULE OPERATIONS =====
+    case 'delete_event':
+      const scheduleName = metadata.scheduleName || target;
+      
+      console.log(`🗑️ Deleting event ${metadata.eventId} from schedule "${scheduleName}"`);
+      await this.db.deleteEvent(userId, scheduleName, metadata.eventId);
+      
+      return { 
+        success: true, 
+        type: 'event_deleted', 
+        details: { 
+          scheduleName, 
+          eventId: metadata.eventId 
+        }
+      };
+
+    case 'delete_schedule':
+      console.log(`🗑️ Deleting entire schedule "${target}"`);
+      await this.db.deleteUserSchedule(userId, target);
+      
+      return { 
+        success: true, 
+        type: 'schedule_deleted', 
+        details: { scheduleName: target }
+      };
+
+    // ===== MEMORY OPERATIONS =====
+    case 'delete_memory_item':
+      const categoryName = metadata.categoryName || target;
+      
+      console.log(`🗑️ Deleting memory item ${metadata.itemId} from category "${categoryName}"`);
+      await this.db.deleteMemoryItem(userId, categoryName, metadata.itemId);
+      
+      return { 
+        success: true, 
+        type: 'memory_item_deleted', 
+        details: { 
+          categoryName, 
+          itemId: metadata.itemId 
+        }
+      };
+
+    case 'delete_memory':
+      console.log(`🗑️ Deleting entire memory category "${target}"`);
+      await this.db.deleteMemoryCategory(userId, target);
+      
+      return { 
+        success: true, 
+        type: 'memory_deleted', 
+        details: { categoryName: target }
+      };
+
+    // ===== FALLBACK FOR AI-MATCHED DELETIONS =====
+    default:
+      // Try to match using AI for ambiguous requests
+      if (!operation) {
+        // Try lists first
         const allLists = await this.db.getUserLists(userId);
         const listToDelete = await this.aiMatcher.findBestListMatch(target, allLists);
         
         if (listToDelete) {
           await this.db.deleteUserList(userId, listToDelete);
-          
           return { 
             success: true, 
             type: 'list_deleted', 
             details: { listName: listToDelete, aiDecision: true }
           };
         }
-      }
-      
-      if (operation === 'delete_schedule') {
+        
+        // Try schedules
         const allSchedules = await this.db.getUserSchedules(userId);
         const scheduleToDelete = await this.aiMatcher.findBestScheduleMatch(target, allSchedules);
         
         if (scheduleToDelete) {
           await this.db.deleteUserSchedule(userId, scheduleToDelete);
-          
           return { 
             success: true, 
             type: 'schedule_deleted', 
             details: { scheduleName: scheduleToDelete, aiDecision: true }
           };
         }
-      }
-      
-      if (operation === 'delete_memory') {
+        
+        // Try memory
         const allMemory = await this.db.getUserMemories(userId);
         const memoryToDelete = await this.aiMatcher.findBestMemoryMatch(target, allMemory);
         
         if (memoryToDelete) {
           await this.db.deleteMemoryCategory(userId, memoryToDelete);
-          
           return { 
             success: true, 
             type: 'memory_deleted', 
@@ -436,8 +517,12 @@ class EnhancedSmartActionProcessor {
         }
       }
       
-      return { success: false, error: 'Target not found for deletion' };
-    }
+      return { 
+        success: false, 
+        error: `Could not find target "${target}" for deletion` 
+      };
+  }
+}
   
     /**
      * Handle smart scheduling
