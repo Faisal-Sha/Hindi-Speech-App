@@ -853,7 +853,7 @@ async function updateEvent(userId, scheduleName, eventId, updates) {
     const allowedFields = {
       'title': 'event_title',
       'description': 'event_description', 
-      'time': 'start_time',
+      'startTime': 'start_time',
       'endTime': 'end_time',
       'location': 'location',
       'type': 'event_type',
