@@ -1,5 +1,6 @@
 const express = require('express');
 const { OpenAI } = require('openai');
+
 const {
   pool,
   ensureUser,
@@ -32,7 +33,38 @@ const {
 } = require('./database');
 const { EnhancedSmartActionProcessor } = require('./action-processor');
 
+
 const router = express.Router();
+
+const { body, validationResult } = require('express-validator');
+const { 
+  authenticateAccount, 
+  authorizeProfileAccess,
+  authRateLimit, 
+  apiRateLimit,
+  cleanupSession,
+  validateAuthRequest,
+  securityHeaders
+} = require('./middleware/familyAuth');
+
+const { 
+  generateAccountToken, 
+  isValidEmail, 
+  validatePassword,
+  validateAccountName
+} = require('./utils/familyAuth');
+
+const { 
+  createFamilyAccount, 
+  authenticateFamilyAccount, 
+  getFamilyAccountWithProfiles,
+  createProfileInAccount,
+  createAccountSession
+} = require('./database');
+
+// Apply security headers to all routes
+router.use(securityHeaders);
+router.use(apiRateLimit);
 
 // Initialize OpenAI
 const openai = new OpenAI({
@@ -292,6 +324,346 @@ function initializeSmartProcessor() {
 
 // Initialize on startup
 initializeSmartProcessor();
+
+
+
+// =============================================
+// FAMILY ACCOUNT AUTHENTICATION ROUTES
+// =============================================
+
+/**
+ * POST /auth/signup - Create a new family account
+ * This is where families register for the first time
+ */
+router.post('/auth/signup', 
+  authRateLimit,
+  validateAuthRequest(['email', 'password', 'accountName']),
+  [
+    body('email')
+      .isEmail()
+      .normalizeEmail()
+      .withMessage('Please provide a valid email address'),
+    body('password')
+      .isLength({ min: 8 })
+      .withMessage('Password must be at least 8 characters long'),
+    body('accountName')
+      .trim()
+      .isLength({ min: 2, max: 50 })
+      .withMessage('Account name must be 2-50 characters long')
+  ],
+  async (req, res) => {
+    try {
+      console.log('📝 Family account signup request received');
+      
+      // Check validation errors from express-validator
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        console.log('❌ Validation errors:', errors.array());
+        return res.status(400).json({
+          error: 'Validation failed',
+          message: 'Please check your input data',
+          details: errors.array()
+        });
+      }
+
+      const { email, password, accountName } = req.body;
+      
+      // Additional custom validation
+      if (!isValidEmail(email)) {
+        return res.status(400).json({
+          error: 'Invalid email',
+          message: 'Please provide a valid email address'
+        });
+      }
+      
+      const passwordValidation = validatePassword(password);
+      if (!passwordValidation.isValid) {
+        return res.status(400).json({
+          error: 'Weak password',
+          message: 'Password does not meet security requirements',
+          requirements: passwordValidation.errors
+        });
+      }
+      
+      const accountNameValidation = validateAccountName(accountName);
+      if (!accountNameValidation.isValid) {
+        return res.status(400).json({
+          error: 'Invalid account name',
+          message: 'Account name does not meet requirements',
+          requirements: accountNameValidation.errors
+        });
+      }
+      
+      // Create the family account
+      const account = await createFamilyAccount(email, password, accountName);
+      
+      // Generate JWT token for immediate login
+      const token = generateAccountToken({
+        email: account.email,
+        accountName: account.account_name,
+        accountId: account.id
+      });
+      
+      // Create session record
+      const sessionData = {
+        userAgent: req.get('User-Agent'),
+        ipAddress: req.ip
+      };
+      await createAccountSession(account.email, token, sessionData);
+      
+      console.log(`✅ Family account created and logged in: ${accountName}`);
+      
+      // Return success with token
+      res.status(201).json({
+        message: 'Family account created successfully',
+        token,
+        account: {
+          email: account.email,
+          accountName: account.account_name,
+          maxProfiles: account.max_profiles,
+          profileCount: 0,
+          profiles: []
+        }
+      });
+      
+    } catch (error) {
+      console.error('❌ Signup error:', error);
+      
+      if (error.message.includes('already exists')) {
+        return res.status(409).json({
+          error: 'Account exists',
+          message: 'An account with this email already exists'
+        });
+      }
+      
+      res.status(500).json({
+        error: 'Signup failed',
+        message: 'Unable to create account. Please try again.'
+      });
+    }
+  }
+);
+
+/**
+ * POST /auth/login - Authenticate family account
+ * This is where families log into their account
+ */
+router.post('/auth/login',
+  authRateLimit,
+  validateAuthRequest(['email', 'password']),
+  async (req, res) => {
+    try {
+      console.log('🔐 Family account login request received');
+      
+      const { email, password } = req.body;
+      
+      // Authenticate the account
+      const account = await authenticateFamilyAccount(email, password);
+      
+      if (!account) {
+        console.log(`❌ Authentication failed for: ${email}`);
+        return res.status(401).json({
+          error: 'Authentication failed',
+          message: 'Invalid email or password'
+        });
+      }
+      
+      // Generate JWT token
+      const token = generateAccountToken({
+        email: account.email,
+        accountName: account.accountName,
+        accountId: account.id
+      });
+      
+      // Create session record
+      const sessionData = {
+        userAgent: req.get('User-Agent'),
+        ipAddress: req.ip
+      };
+      await createAccountSession(account.email, token, sessionData);
+      
+      // Get account with all profiles for the profile selector
+      const accountWithProfiles = await getFamilyAccountWithProfiles(account.email);
+      
+      console.log(`✅ Family account logged in: ${account.accountName} with ${accountWithProfiles.profileCount} profiles`);
+      
+      res.json({
+        message: 'Login successful',
+        token,
+        account: {
+          email: accountWithProfiles.email,
+          accountName: accountWithProfiles.accountName,
+          maxProfiles: accountWithProfiles.maxProfiles,
+          profileCount: accountWithProfiles.profileCount,
+          profiles: accountWithProfiles.profiles
+        }
+      });
+      
+    } catch (error) {
+      console.error('❌ Login error:', error);
+      res.status(500).json({
+        error: 'Login failed',
+        message: 'Unable to login. Please try again.'
+      });
+    }
+  }
+);
+
+/**
+ * GET /auth/account - Get current account info with profiles
+ * This is called when the app loads to check if user is still logged in
+ */
+router.get('/auth/account', 
+  authenticateAccount,
+  async (req, res) => {
+    try {
+      console.log(`📋 Getting account info for: ${req.account.email}`);
+      
+      // Get fresh account data with profiles
+      const accountWithProfiles = await getFamilyAccountWithProfiles(req.account.email);
+      
+      if (!accountWithProfiles) {
+        return res.status(404).json({
+          error: 'Account not found',
+          message: 'Account no longer exists'
+        });
+      }
+      
+      res.json({
+        account: {
+          email: accountWithProfiles.email,
+          accountName: accountWithProfiles.accountName,
+          maxProfiles: accountWithProfiles.maxProfiles,
+          profileCount: accountWithProfiles.profileCount,
+          profiles: accountWithProfiles.profiles
+        }
+      });
+      
+    } catch (error) {
+      console.error('❌ Error getting account info:', error);
+      res.status(500).json({
+        error: 'Failed to get account info',
+        message: 'Unable to retrieve account information'
+      });
+    }
+  }
+);
+
+/**
+ * POST /auth/logout - Logout from family account
+ * Invalidates the current session
+ */
+router.post('/auth/logout',
+  authenticateAccount,
+  cleanupSession,
+  async (req, res) => {
+    try {
+      console.log(`🚪 Account logged out: ${req.account.email}`);
+      
+      res.json({
+        message: 'Logged out successfully'
+      });
+      
+    } catch (error) {
+      console.error('❌ Logout error:', error);
+      res.status(500).json({
+        error: 'Logout failed',
+        message: 'Unable to logout properly'
+      });
+    }
+  }
+);
+
+// =============================================
+// PROFILE MANAGEMENT ROUTES (WITHIN ACCOUNT)
+// =============================================
+
+/**
+ * POST /auth/profiles - Create a new profile in the family account
+ * This is your existing "Add New User" functionality, but now protected
+ */
+router.post('/auth/profiles',
+  authenticateAccount,
+  validateAuthRequest(['displayName']),
+  async (req, res) => {
+    try {
+      console.log(`👤 Creating new profile for account: ${req.account.email}`);
+      
+      const { displayName, preferredLanguage, avatarEmoji } = req.body;
+      
+      // Validate display name
+      if (!displayName || displayName.trim().length < 2) {
+        return res.status(400).json({
+          error: 'Invalid display name',
+          message: 'Display name must be at least 2 characters long'
+        });
+      }
+      
+      // Create profile in the account
+      const profile = await createProfileInAccount(req.account.email, displayName, {
+        preferredLanguage: preferredLanguage || 'en-US',
+        avatarEmoji: avatarEmoji || '👤'
+      });
+      
+      console.log(`✅ Profile created: ${displayName} (${profile.user_id})`);
+      
+      res.status(201).json({
+        message: 'Profile created successfully',
+        profile
+      });
+      
+    } catch (error) {
+      console.error('❌ Error creating profile:', error);
+      
+      if (error.message.includes('Maximum number of profiles')) {
+        return res.status(403).json({
+          error: 'Profile limit reached',
+          message: `You can only have ${req.account.maxProfiles} profiles per account`
+        });
+      }
+      
+      if (error.message.includes('already exists')) {
+        return res.status(409).json({
+          error: 'Profile exists',
+          message: 'A profile with this name already exists'
+        });
+      }
+      
+      res.status(500).json({
+        error: 'Failed to create profile',
+        message: 'Unable to create profile. Please try again.'
+      });
+    }
+  }
+);
+
+/**
+ * GET /auth/profiles - Get all profiles in the family account
+ * Alternative way to get profiles (the main way is through GET /auth/account)
+ */
+router.get('/auth/profiles',
+  authenticateAccount,
+  async (req, res) => {
+    try {
+      const accountWithProfiles = await getFamilyAccountWithProfiles(req.account.email);
+      
+      res.json({
+        profiles: accountWithProfiles.profiles || [],
+        profileCount: accountWithProfiles.profileCount,
+        maxProfiles: accountWithProfiles.maxProfiles
+      });
+      
+    } catch (error) {
+      console.error('❌ Error getting profiles:', error);
+      res.status(500).json({
+        error: 'Failed to get profiles',
+        message: 'Unable to retrieve profiles'
+      });
+    }
+  }
+);
+
+
 
 /*============================================
   MAIN CHAT ROUTE - AI-POWERED INTELLIGENCE
@@ -639,22 +1011,24 @@ router.get('/health', async (req, res) => {
   }
 });
 
-/* Users and Authentication */
-router.get('/users', async (req, res) => {
+/* Users and Authentication */ 
+router.get('/users', authenticateAccount, async (req, res) => {
   try {
-    console.log('👥 Getting all user profiles with data counts...');
+    console.log('👥 Getting all user profiles with data counts (authenticated request)...');
+    console.log('🔐 Requested by user:', req.user.userId);
     
-    // Instead of relying on the stored procedure, let's build the data ourselves
-    // Step 1: Get all user profiles
+    // Get all user profiles
     const profilesResult = await pool.query(`
       SELECT 
         u.user_id,
+        u.email,
         COALESCE(up.display_name, u.user_id) as display_name,
         COALESCE(up.preferred_language, 'en-US') as preferred_language,
         COALESCE(up.avatar_emoji, '👤') as avatar_emoji,
         COALESCE(up.theme_preference, 'default') as theme_preference,
         u.last_active,
-        u.created_at
+        u.created_at,
+        u.is_verified
       FROM users u
       LEFT JOIN user_profiles up ON u.user_id = up.user_id
       ORDER BY u.last_active DESC NULLS LAST
@@ -662,66 +1036,55 @@ router.get('/users', async (req, res) => {
     
     console.log(`📋 Found ${profilesResult.rows.length} user profiles`);
     
-    // Step 2: For each user, get their actual data counts
+    // Get data counts for each user
     const usersWithCounts = await Promise.all(
       profilesResult.rows.map(async (user) => {
         try {
-          // Count lists for this user
+          // Count lists
           const listsCount = await pool.query(`
             SELECT COUNT(*) as count 
             FROM user_lists 
             WHERE user_id = $1 AND is_archived = false
           `, [user.user_id]);
           
-          // Count schedules for this user  
+          // Count schedules
           const schedulesCount = await pool.query(`
             SELECT COUNT(*) as count 
             FROM user_schedules 
             WHERE user_id = $1
           `, [user.user_id]);
           
-          // Count memory categories for this user
+          // Count memory categories
           const memoryCount = await pool.query(`
             SELECT COUNT(*) as count 
             FROM memory_categories 
             WHERE user_id = $1
           `, [user.user_id]);
           
-          console.log(`📊 User ${user.display_name}: ${listsCount.rows[0].count} lists, ${schedulesCount.rows[0].count} schedules, ${memoryCount.rows[0].count} memory categories`);
-          
           return {
             ...user,
-            // Add the counts in the format the frontend expects
-            lists_count: parseInt(listsCount.rows[0].count) || 0,
-            schedules_count: parseInt(schedulesCount.rows[0].count) || 0,
-            memory_count: parseInt(memoryCount.rows[0].count) || 0,
-            // Also provide in data_summary format for backward compatibility
-            data_summary: {
-              lists_count: parseInt(listsCount.rows[0].count) || 0,
-              schedules_count: parseInt(schedulesCount.rows[0].count) || 0,
-              memory_count: parseInt(memoryCount.rows[0].count) || 0
+            data_counts: {
+              lists: parseInt(listsCount.rows[0]?.count || 0),
+              schedules: parseInt(schedulesCount.rows[0]?.count || 0),
+              memory: parseInt(memoryCount.rows[0]?.count || 0)
             }
           };
         } catch (error) {
-          console.error(`❌ Error getting counts for user ${user.user_id}:`, error);
-          // Return user with zero counts if there's an error
+          console.error(`Error getting counts for user ${user.user_id}:`, error);
           return {
             ...user,
-            lists_count: 0,
-            schedules_count: 0,
-            memory_count: 0,
-            data_summary: {
-              lists_count: 0,
-              schedules_count: 0,
-              memory_count: 0
-            }
+            data_counts: { lists: 0, schedules: 0, memory: 0 }
           };
         }
       })
     );
     
-    console.log(`✅ Returning ${usersWithCounts.length} users with complete data counts`);
-    res.json(usersWithCounts);
+    res.json({
+      success: true,
+      count: usersWithCounts.length,
+      users: usersWithCounts,
+      requestedBy: req.user.userId
+    });
     
   } catch (error) {
     console.error('❌ Error getting users:', error);
@@ -729,26 +1092,34 @@ router.get('/users', async (req, res) => {
   }
 });
 
-router.get('/user-profile/:userId', async (req, res) => {
-    try {
-      const { userId } = req.params;
-      console.log(`👤 Getting profile for user: ${userId}`);
-      
-      const userProfile = await getUserProfile(userId);
-      
-      if (!userProfile) {
-        return res.status(404).json({ error: 'User not found' });
-      }
-      
-      console.log(`✅ Profile loaded for ${userId}:`, userProfile.display_name);
-      res.json(userProfile);
-    } catch (error) {
-      console.error('❌ Error getting user profile:', error);
-      res.status(500).json({ error: 'Failed to get user profile' });
+router.get('/user-profile/:userId', authenticateAccount, authorizeProfileAccess, async (req, res) => {
+  try {
+    const { userId } = req.params;
+    
+    // Users can only access their own profile (or admins can access any - you can implement admin logic later)
+    if (req.user.userId !== userId) {
+      return res.status(403).json({ 
+        error: 'Access denied',
+        message: 'You can only access your own profile'
+      });
     }
+    
+    console.log(`👤 Getting user profile: ${userId} (requested by: ${req.user.userId})`);
+    
+    const userProfile = await getUserProfile(userId);
+    
+    if (!userProfile) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    res.json(userProfile);
+  } catch (error) {
+    console.error('❌ Error getting user profile:', error);
+    res.status(500).json({ error: 'Failed to get user profile' });
+  }
 });
 
-router.post('/create-user', async (req, res) => {
+router.post('/create-user', authenticateAccount, async (req, res) => {
     try {
       const { userId, displayName, preferredLanguage, avatarEmoji } = req.body;
       
@@ -821,7 +1192,7 @@ router.post('/login', async (req, res) => {
     }
 });
 
-router.put('/update-user/:userId', async (req, res) => {
+router.put('/update-user/:userId', authenticateAccount, authorizeProfileAccess, async (req, res) => {
     try {
       const { userId } = req.params;
       const { displayName, preferredLanguage, avatarEmoji, themePreference } = req.body;
@@ -856,44 +1227,56 @@ router.put('/update-user/:userId', async (req, res) => {
     }
 });
 
-//❌Need to fix
-router.delete('/delete-user/:userId', async (req, res) => {
+router.delete('/delete-user/:userId',
+  authenticateAccount,
+  authorizeProfileAccess,
+  async (req, res) => {
     try {
       const { userId } = req.params;
       
-      console.log(`🗑️ Deleting user and all data: ${userId}`);
+      console.log(`🗑️ Deleting profile: ${userId} from account: ${req.account.email}`);
       
       // Start transaction to ensure all data is deleted atomically
       await pool.query('BEGIN');
       
       try {
         // Delete in order to respect foreign key constraints
+        await pool.query('DELETE FROM list_items WHERE list_id IN (SELECT id FROM user_lists WHERE user_id = $1)', [userId]);
+        await pool.query('DELETE FROM user_lists WHERE user_id = $1', [userId]);
+        await pool.query('DELETE FROM schedule_events WHERE schedule_id IN (SELECT id FROM user_schedules WHERE user_id = $1)', [userId]);
+        await pool.query('DELETE FROM user_schedules WHERE user_id = $1', [userId]);
+        await pool.query('DELETE FROM memory_items WHERE category_id IN (SELECT id FROM memory_categories WHERE user_id = $1)', [userId]);
+        await pool.query('DELETE FROM memory_categories WHERE user_id = $1', [userId]);
         await pool.query('DELETE FROM conversations WHERE user_id = $1', [userId]);
         await pool.query('DELETE FROM user_data WHERE user_id = $1', [userId]);
-        await pool.query('DELETE FROM user_sessions WHERE user_id = $1', [userId]);
         await pool.query('DELETE FROM user_profiles WHERE user_id = $1', [userId]);
         await pool.query('DELETE FROM users WHERE user_id = $1', [userId]);
         
+        // Commit transaction
         await pool.query('COMMIT');
         
-        console.log(`✅ User ${userId} and all data deleted successfully`);
-        res.json({ message: 'User deleted successfully' });
+        console.log(`✅ Profile deleted successfully: ${userId}`);
+        res.json({ message: 'Profile deleted successfully', userId });
+        
       } catch (error) {
         await pool.query('ROLLBACK');
         throw error;
       }
+      
     } catch (error) {
-      console.error('❌ Error deleting user:', error);
-      res.status(500).json({ error: 'Failed to delete user' });
+      console.error('❌ Error deleting profile:', error);
+      res.status(500).json({ error: 'Failed to delete profile' });
     }
-});
+  }
+);
 
 
 ///////////////////////////
 /* DATA RETRIEVAL*/
 //////////////////////////
 
-router.get('/data/:userId', async (req, res) => {
+router.get('/data/:userId', authenticateAccount,
+  authorizeProfileAccess, async (req, res) => {
   try {
     const { userId } = req.params;
     

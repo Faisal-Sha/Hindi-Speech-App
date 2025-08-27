@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import './App.css';
 
 // Import your existing components
+import AuthScreen from './components/AuthScreen';
 import Header from './components/Header';
 import UserSelector from './components/UserSelector';
 import ContentDisplay from './components/ContentDisplay';
@@ -10,6 +11,13 @@ import useDataManagement from './hooks/useDataManagement';
 import useSpeechRecognition from './hooks/useSpeechRecognition';
 
 function App() {
+  // =====================================
+  // AUTHENTICATION STATE
+  // =====================================
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [authToken, setAuthToken] = useState(null);
+  const [familyAccount, setFamilyAccount] = useState(null);
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   // =====================================
   // STATE MANAGEMENT
   // =====================================
@@ -43,37 +51,154 @@ function App() {
   } = useSpeechRecognition(currentLanguage);
 
   // =====================================
+  // AUTHENTICATION FUNCTIONS
+  // =====================================
+  
+  // Check if user is already logged in when app loads
+  useEffect(() => {
+    checkExistingAuth();
+  }, []);
+
+  const checkExistingAuth = async () => {
+    try {
+      console.log('🔍 Checking for existing authentication...');
+      
+      // Get token from localStorage
+      const savedToken = localStorage.getItem('familyAuthToken');
+      
+      if (!savedToken) {
+        console.log('❌ No saved token found');
+        setIsCheckingAuth(false);
+        return;
+      }
+      
+      // Verify token with backend
+      const response = await fetch('http://localhost:3001/auth/account', {
+        headers: {
+          'Authorization': `Bearer ${savedToken}`
+        }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        console.log('✅ Existing authentication valid:', data.account);
+        
+        // Restore authentication state
+        setAuthToken(savedToken);
+        setFamilyAccount(data.account);
+        setIsAuthenticated(true);
+        
+        // If they only have one profile, auto-select it
+        if (data.account.profiles && data.account.profiles.length === 1) {
+          handleUserSelect(data.account.profiles[0]);
+        }
+        
+      } else {
+        console.log('❌ Saved token is invalid');
+        localStorage.removeItem('familyAuthToken');
+      }
+      
+    } catch (error) {
+      console.error('❌ Error checking authentication:', error);
+      localStorage.removeItem('familyAuthToken');
+    } finally {
+      setIsCheckingAuth(false);
+    }
+  };
+
+  // Handle successful authentication (login or signup)
+  const handleAuthSuccess = (account, token) => {
+    console.log('✅ Authentication successful:', account);
+    
+    setAuthToken(token);
+    setFamilyAccount(account);
+    setIsAuthenticated(true);
+    
+    // If they only have one profile, auto-select it
+    if (account.profiles && account.profiles.length === 1) {
+      handleUserSelect(account.profiles[0]);
+    } else {
+      setIsSelectingUser(true);
+    }
+  };
+
+  // Handle logout
+  const handleLogout = async () => {
+    try {
+      console.log('🚪 Logging out...');
+      
+      // Call logout endpoint to cleanup session
+      if (authToken) {
+        await fetch('http://localhost:3001/auth/logout', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${authToken}`
+          }
+        });
+      }
+      
+      // Clear local state
+      localStorage.removeItem('familyAuthToken');
+      setAuthToken(null);
+      setFamilyAccount(null);
+      setIsAuthenticated(false);
+      setCurrentUser(null);
+      setIsSelectingUser(true);
+      setMessages([]);
+      
+      console.log('✅ Logged out successfully');
+      
+    } catch (error) {
+      console.error('❌ Error during logout:', error);
+      // Still clear local state even if backend call fails
+      localStorage.removeItem('familyAuthToken');
+      setAuthToken(null);
+      setFamilyAccount(null);
+      setIsAuthenticated(false);
+      setCurrentUser(null);
+      setIsSelectingUser(true);
+    }
+  };
+
+
+  // =====================================
   // USER MANAGEMENT
   // =====================================
   
   // Load user data when user is selected
   useEffect(() => {
-    if (currentUser && currentUser.user_id) {
+    if (currentUser && currentUser.user_id && authToken) {
       console.log(`👤 User selected: ${currentUser.display_name} (${currentUser.user_id})`);
       console.log(`🌍 User's preferred language: ${currentUser.preferred_language}`);
       
       // Load this user's data
-      loadUserDataForUser(currentUser.user_id);
+      loadUserDataForProfile(currentUser.user_id);
     }
-  }, [currentUser]);
+  }, [currentUser, authToken]);
 
-  const loadUserDataForUser = async (userId) => {
+  const loadUserDataForProfile = async (userId) => {
     try {
-      await loadUserData(userId);   
+      await loadUserData(userId, authToken);   
     } catch (error) {
-      console.error('❌ Error in loadUserDataForUser:', error);
+      console.error('❌ Error loading profile data:', error);
+      
+      // If authentication error, logout
+      if (error.message.includes('401') || error.message.includes('403')) {
+        handleLogout();
+      }
     }
   };
 
+
   const handleUserSelect = (userProfile) => {
-    console.log('👤 User selected:', userProfile);
+    console.log('👤 Profile selected:', userProfile);
     setCurrentUser(userProfile);
     setIsSelectingUser(false);
     
-    // Clear any existing data when switching users
+    // Clear any existing data when switching profiles
     setMessages([]);
     
-    // Send welcome message in user's preferred language
+    // Send welcome message in profile's preferred language
     const welcomeMessages = {
       'en-US': `Welcome back, ${userProfile.display_name}! How can I help you today?`,
       'hi-IN': `नमस्ते ${userProfile.display_name}! आज मैं आपकी कैसे मदद कर सकता हूँ?`,
@@ -82,21 +207,98 @@ function App() {
       'de-DE': `Willkommen zurück, ${userProfile.display_name}! Wie kann ich Ihnen heute helfen?`
     };
     
-    const welcomeMessage = {
-      type: 'ai',
-      text: welcomeMessages[userProfile.preferred_language] || welcomeMessages['en-US'],
-      timestamp: new Date(),
-      isWelcome: true
-    };
+    const welcomeText = welcomeMessages[userProfile.preferred_language] || welcomeMessages['en-US'];
     
-    setMessages([welcomeMessage]);
+    setMessages([{
+      type: "assistant",
+      text: welcomeText,
+      timestamp: new Date(),
+      mode: 'chat'
+    }]);
   };
 
   const handleSwitchUser = () => {
+    console.log('🔄 Switching profile...');
     setCurrentUser(null);
     setIsSelectingUser(true);
     setMessages([]);
   };
+
+
+  // =====================================
+  // UPDATED DATA MANAGEMENT WITH AUTH
+  // =====================================
+  
+  // Update your existing data management functions to include auth token
+  const authenticatedFetch = async (url, options = {}) => {
+    const headers = {
+      'Content-Type': 'application/json',
+      ...(authToken && { 'Authorization': `Bearer ${authToken}` }),
+      ...options.headers
+    };
+    
+    const response = await fetch(url, {
+      ...options,
+      headers
+    });
+    
+    // Handle authentication errors
+    if (response.status === 401 || response.status === 403) {
+      console.error('❌ Authentication error, logging out');
+      handleLogout();
+      throw new Error('Authentication failed');
+    }
+    
+    return response;
+  };
+
+  // =====================================
+  // LOADING STATE
+  // =====================================
+  
+  if (isCheckingAuth) {
+    return (
+      <div className="loading-screen">
+        <div className="loading-container">
+          <div className="loading-spinner">⏳</div>
+          <h2>Loading Family Assistant...</h2>
+          <p>Checking your authentication status</p>
+        </div>
+      </div>
+    );
+  }
+
+  // =====================================
+  // RENDER AUTHENTICATION FLOW
+  // =====================================
+  
+  // Show authentication screen if not logged in
+  if (!isAuthenticated) {
+    return <AuthScreen onAuthSuccess={handleAuthSuccess} />;
+  }
+
+  // Show profile selector if logged in but no profile selected
+  if (isSelectingUser) {
+    return (
+      <div className="app">
+        <Header 
+          currentUser={null}
+          familyAccount={familyAccount}
+          onLogout={handleLogout}
+          onSwitchProfile={handleSwitchUser}
+          showStatus={showStatus}
+          onToggleStatus={() => setShowStatus(!showStatus)}
+        />
+        <UserSelector 
+          onUserSelect={handleUserSelect}
+          currentUser={currentUser}
+          familyAccount={familyAccount}
+          authToken={authToken}
+        />
+      </div>
+    );
+  }
+
 
   // =====================================
   // AI COMMUNICATION - SIMPLIFIED AI-FIRST APPROACH
@@ -107,14 +309,21 @@ function App() {
       alert('Please select a user first');
       return;
     }
-
+  
+    if (!authToken) {
+      console.error('❌ No auth token available');
+      alert('Authentication required. Please login again.');
+      handleLogout();
+      return;
+    }
+  
     const trimmedMessage = messageText.trim();
     if (!trimmedMessage) return;
-
+  
     // Clear speech input
     clearText();
     setInputText('');
-
+  
     // Add user message to conversation
     const userMessage = {
       type: 'user',
@@ -122,25 +331,28 @@ function App() {
       timestamp: new Date(),
       user: currentUser.display_name
     };
-
+  
     setMessages(prev => [...prev, userMessage]);
     setIsAILoading(true);
-
+  
     try {
-      console.log(`📤 Sending message from ${currentUser.display_name}: "${trimmedMessage}"`);
-
-      // Prepare context with current data (for AI context, not local processing)
+      console.log(`📤 Sending authenticated message from ${currentUser.display_name}: "${trimmedMessage}"`);
+  
+      // Prepare context with current data
       const context = {
         lists: userLists,
         schedules: userSchedules,
         memory: userMemory,
         chats: userChats
       };
-
-      // Send to backend - AI will handle EVERYTHING
+  
+      // 🔑 KEY FIX: Include Authorization header with JWT token
       const response = await fetch('http://localhost:3001/chat', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}` // 👈 This was missing!
+        },
         body: JSON.stringify({
           message: trimmedMessage,
           mode: currentMode,
@@ -149,14 +361,21 @@ function App() {
           userId: currentUser.user_id
         })
       });
-
+  
       if (!response.ok) {
+        // Handle different types of auth errors
+        if (response.status === 401 || response.status === 403) {
+          console.error('❌ Authentication failed - logging out');
+          alert('Your session has expired. Please login again.');
+          handleLogout();
+          return;
+        }
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-
+  
       const aiResponse = await response.json();
       console.log('🤖 AI Response received:', aiResponse);
-
+  
       // Add AI response to chat
       const aiMessage = {
         type: 'ai',
@@ -166,38 +385,39 @@ function App() {
         actions: aiResponse.actions || []
       };
       setMessages(prev => [...prev, aiMessage]);
-
-      // 🔑 KEY FIX: Reload data if actions were processed
-      if (aiResponse.actionResults && aiResponse.actionResults.length > 0) {
-        console.log('🔄 Actions were processed, reloading user data...');
+  
+      // Handle AI actions if any were returned
+      if (aiResponse.actions && aiResponse.actions.length > 0) {
+        console.log('🔄 Processing AI actions:', aiResponse.actions);
+        const actionsProcessed = await handleAiActions(aiResponse.actions, currentUser.user_id, authToken);
         
-        // Wait a moment for backend to complete processing
-        setTimeout(async () => {
-          await loadUserData(currentUser.user_id);
-          console.log('✅ Data refreshed after AI actions');
-        }, 500);
+        if (actionsProcessed) {
+          console.log('✅ AI actions completed, data updated');
+        }
       }
-
-      
-
+  
     } catch (error) {
       console.error('❌ Error sending message:', error);
       
       const errorMessage = {
         type: 'ai',
-        text: `Sorry, I'm having trouble right now. Error: ${error.message}`,
+        text: `Sorry, I'm having trouble right now. ${error.message.includes('401') || error.message.includes('403') ? 'Please login again.' : 'Please try again in a moment.'}`,
         timestamp: new Date(),
         mode: currentMode,
         isError: true
       };
       setMessages(prev => [...prev, errorMessage]);
+      
+      // If it's an auth error, logout
+      if (error.message.includes('401') || error.message.includes('403')) {
+        handleLogout();
+      }
+      
     } finally {
       setIsAILoading(false);
-      // Clear input
-      clearText();
-      setInputText('');
     }
   };
+  
 
   // =====================================
   // MANUAL UI OPERATIONS (Keep these for direct UI interactions)
@@ -521,14 +741,17 @@ function App() {
   return (
     <div className="App">
       {/* Enhanced Header with User Info */}
-      <Header 
-        language={currentLanguage}
-        onLanguageChange={() => {}} // Language is now controlled by user profile
-        currentMode={currentMode}
-        onModeChange={setCurrentMode}
-        currentUser={currentUser}
-        onSwitchUser={handleSwitchUser}
-      />
+     
+<Header 
+  currentUser={currentUser}
+  familyAccount={familyAccount}
+  onLogout={handleLogout}
+  onSwitchProfile={handleSwitchUser}
+  showStatus={showStatus}
+  onToggleStatus={() => setShowStatus(!showStatus)}
+  currentMode={currentMode}
+  onModeChange={setCurrentMode}
+/>
 
       {/* User Info Bar */}
       <div className="user-info-bar">
@@ -585,7 +808,11 @@ function App() {
         onUpdateMemoryItem={handleUpdateMemoryItem}
         onDeleteMemoryItem={handleDeleteMemoryItem}
         onDeleteMemory={handleDeleteMemory}
+        authenticatedFetch={authenticatedFetch}
+        authToken={authToken}
+        currentLanguage={currentLanguage}
       />
+
 
       {/* Input Section */}
       <div className="input-section">

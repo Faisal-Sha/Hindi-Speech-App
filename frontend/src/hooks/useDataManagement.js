@@ -12,6 +12,45 @@ const useDataManagement = (messages) => {
   const [isLoading, setIsLoading] = useState(false);
   const [currentUserId, setCurrentUserId] = useState(null);
 
+  // =====================================
+  // AUTHENTICATED FETCH HELPER
+  // =====================================
+  
+  const authenticatedFetch = async (url, options = {}, authToken) => {
+    try {
+      const headers = {
+        'Content-Type': 'application/json',
+        ...(authToken && { 'Authorization': `Bearer ${authToken}` }),
+        ...options.headers
+      };
+      
+      const response = await fetch(url, {
+        ...options,
+        headers
+      });
+      
+      // Handle authentication errors
+      if (response.status === 401) {
+        throw new Error('Authentication required - please login again');
+      }
+      
+      if (response.status === 403) {
+        throw new Error('Access denied - you can only access your own family\'s data');
+      }
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `HTTP ${response.status}: ${response.statusText}`);
+      }
+      
+      return response;
+      
+    } catch (error) {
+      console.error('❌ Authenticated fetch error:', error);
+      throw error;
+    }
+  };
+
   // ===== DATA TRANSFORMATION FUNCTION =====
   const transformBackendData = useCallback((rawData) => {
     console.log('🔄 Transforming backend data:', rawData);
@@ -212,6 +251,8 @@ const useDataManagement = (messages) => {
     // Functions
     loadUserData,
     handleAiActions,
+    authenticatedFetch: (url, options = {}, authToken) => 
+      authenticatedFetch(url, options, authToken), 
     
     // Debug info
     debugInfo: {

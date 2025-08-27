@@ -8,6 +8,349 @@ const pool = new Pool({
     port: process.env.DB_PORT || 5432,
   });
 
+const { 
+    hashPassword, 
+    comparePassword, 
+    generateProfileId, 
+    hashToken 
+  } = require('./utils/familyAuth');
+  
+
+// =============================================
+// FAMILY ACCOUNT FUNCTIONS
+// =============================================
+
+/**
+ * Create a new family account with authentication
+ * This is like creating a "family login" that can have multiple profiles
+ * @param {string} email - Account email (login credential)
+ * @param {string} password - Account password
+ * @param {string} accountName - Family/household name (e.g., "Smith Family")
+ * @returns {object} - Created account info
+ */
+async function createFamilyAccount(email, password, accountName) {
+  try {
+    console.log(`👨‍👩‍👧‍👦 Creating family account: ${accountName} (${email})`);
+    
+    // Hash the password for secure storage
+    const passwordHash = await hashPassword(password);
+    
+    // Create the account
+    const result = await pool.query(`
+      INSERT INTO accounts (email, password_hash, account_name, created_at)
+      VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
+      RETURNING id, email, account_name, created_at, max_profiles
+    `, [email, passwordHash, accountName]);
+    
+    const account = result.rows[0];
+    console.log(`✅ Family account created successfully: ${accountName} (ID: ${account.id})`);
+    
+    return account;
+    
+  } catch (error) {
+    console.error('❌ Error creating family account:', error);
+    
+    // Handle specific database errors
+    if (error.code === '23505') { // Unique violation
+      throw new Error('An account with this email already exists');
+    }
+    
+    throw new Error('Failed to create family account');
+  }
+}
+
+/**
+ * Authenticate a family account (login)
+ * This is what happens when someone enters email/password
+ * @param {string} email - Account email
+ * @param {string} password - Account password
+ * @returns {object|null} - Account info if successful, null if failed
+ */
+async function authenticateFamilyAccount(email, password) {
+  try {
+    console.log(`🔐 Authenticating family account: ${email}`);
+    
+    // Get account with password hash
+    const result = await pool.query(`
+      SELECT id, email, password_hash, account_name, is_verified, last_login
+      FROM accounts 
+      WHERE email = $1
+    `, [email]);
+    
+    if (result.rows.length === 0) {
+      console.log(`❌ Account not found: ${email}`);
+      return null;
+    }
+    
+    const account = result.rows[0];
+    
+    // Verify password
+    const isValidPassword = await comparePassword(password, account.password_hash);
+    
+    if (!isValidPassword) {
+      console.log(`❌ Invalid password for account: ${email}`);
+      return null;
+    }
+    
+    // Update last login timestamp
+    await pool.query(`
+      UPDATE accounts 
+      SET last_login = CURRENT_TIMESTAMP 
+      WHERE email = $1
+    `, [email]);
+    
+    console.log(`✅ Family account authenticated successfully: ${account.account_name}`);
+    
+    // Return account info (without password hash)
+    return {
+      id: account.id,
+      email: account.email,
+      accountName: account.account_name,
+      isVerified: account.is_verified,
+      lastLogin: account.last_login
+    };
+    
+  } catch (error) {
+    console.error('❌ Error authenticating family account:', error);
+    throw error;
+  }
+}
+
+/**
+ * Get family account with all its profiles
+ * This is what we call after successful login to show the profile selector
+ * @param {string} email - Account email
+ * @returns {object} - Account with profiles array
+ */
+async function getFamilyAccountWithProfiles(email) {
+  try {
+    console.log(`👨‍👩‍👧‍👦 Getting family account with profiles: ${email}`);
+    
+    // Use our view to get account with profiles
+    const result = await pool.query(`
+      SELECT * FROM account_with_profiles WHERE email = $1
+    `, [email]);
+    
+    if (result.rows.length === 0) {
+      console.log(`❌ Family account not found: ${email}`);
+      return null;
+    }
+    
+    const account = result.rows[0];
+    console.log(`✅ Found family account: ${account.account_name} with ${account.profile_count} profiles`);
+    
+    return {
+      id: account.id,
+      email: account.email,
+      accountName: account.account_name,
+      profileCount: account.profile_count,
+      maxProfiles: account.max_profiles,
+      profiles: account.profiles || [],
+      createdAt: account.created_at,
+      lastLogin: account.last_login
+    };
+    
+  } catch (error) {
+    console.error('❌ Error getting family account with profiles:', error);
+    return null;
+  }
+}
+
+/**
+ * Create a new profile within a family account
+ * This is what happens when someone clicks "Add New Profile"
+ * @param {string} accountEmail - Account email (to link the profile)
+ * @param {string} displayName - Profile display name (e.g., "Dad", "Mom", "Kids")
+ * @param {object} profileData - Additional profile data
+ * @returns {object} - Created profile
+ */
+async function createProfileInAccount(accountEmail, displayName, profileData = {}) {
+  try {
+    console.log(`👤 Creating profile "${displayName}" in account: ${accountEmail}`);
+    
+    // Check if account can add more profiles
+    const canAdd = await pool.query(`
+      SELECT can_add_profile($1) as can_add
+    `, [accountEmail]);
+    
+    if (!canAdd.rows[0].can_add) {
+      throw new Error('Maximum number of profiles reached for this account');
+    }
+    
+    // Generate a unique profile ID
+    const profileId = generateProfileId(displayName, accountEmail);
+    
+    // Start transaction to create both user and profile records
+    await pool.query('BEGIN');
+    
+    try {
+      // Create user record linked to account
+      await pool.query(`
+        INSERT INTO users (user_id, account_email, created_at, last_active)
+        VALUES ($1, $2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      `, [profileId, accountEmail]);
+      
+      // Create user profile record with display data
+      const { 
+        preferredLanguage = 'en-US',
+        avatarEmoji = '👤',
+        themePreference = 'default'
+      } = profileData;
+      
+      await pool.query(`
+        INSERT INTO user_profiles (user_id, display_name, preferred_language, avatar_emoji, theme_preference)
+        VALUES ($1, $2, $3, $4, $5)
+      `, [profileId, displayName, preferredLanguage, avatarEmoji, themePreference]);
+      
+      // Commit transaction
+      await pool.query('COMMIT');
+      
+      console.log(`✅ Profile created successfully: ${displayName} (${profileId})`);
+      
+      // Return the full profile
+      return await getUserProfile(profileId);
+      
+    } catch (error) {
+      await pool.query('ROLLBACK');
+      throw error;
+    }
+    
+  } catch (error) {
+    console.error('❌ Error creating profile in account:', error);
+    
+    if (error.code === '23505') { // Unique violation
+      throw new Error('A profile with this name already exists');
+    }
+    
+    throw error;
+  }
+}
+
+/**
+ * Create a session for an authenticated account
+ * This stores the JWT token securely in the database
+ * @param {string} accountEmail - Account email
+ * @param {string} token - JWT token
+ * @param {object} sessionData - Additional session data
+ * @returns {object} - Created session
+ */
+async function createAccountSession(accountEmail, token, sessionData = {}) {
+  try {
+    console.log(`🎫 Creating session for account: ${accountEmail}`);
+    
+    const { userAgent, ipAddress } = sessionData;
+    const tokenHash = hashToken(token);
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+    
+    const result = await pool.query(`
+      INSERT INTO account_sessions (account_email, token_hash, expires_at, user_agent, ip_address)
+      VALUES ($1, $2, $3, $4, $5)
+      RETURNING *
+    `, [accountEmail, tokenHash, expiresAt, userAgent, ipAddress]);
+    
+    console.log(`✅ Session created for account: ${accountEmail}`);
+    return result.rows[0];
+    
+  } catch (error) {
+    console.error('❌ Error creating account session:', error);
+    throw error;
+  }
+}
+
+/**
+ * Verify an account session (check if token is valid)
+ * This happens on every protected request
+ * @param {string} token - JWT token
+ * @returns {object|null} - Session info if valid, null if invalid
+ */
+async function verifyAccountSession(token) {
+  try {
+    const tokenHash = hashToken(token);
+    
+    const result = await pool.query(`
+      SELECT 
+        s.*,
+        a.account_name,
+        a.is_verified,
+        a.max_profiles
+      FROM account_sessions s
+      JOIN accounts a ON s.account_email = a.email
+      WHERE s.token_hash = $1 
+        AND s.expires_at > CURRENT_TIMESTAMP 
+        AND s.is_active = true
+    `, [tokenHash]);
+    
+    if (result.rows.length === 0) {
+      console.log('❌ Session not found or expired');
+      return null;
+    }
+    
+    const session = result.rows[0];
+    
+    // Update last used timestamp
+    await pool.query(`
+      UPDATE account_sessions 
+      SET last_used = CURRENT_TIMESTAMP 
+      WHERE id = $1
+    `, [session.id]);
+    
+    console.log(`✅ Session verified for account: ${session.account_email}`);
+    return session;
+    
+  } catch (error) {
+    console.error('❌ Error verifying account session:', error);
+    return null;
+  }
+}
+
+/**
+ * Delete an account session (logout)
+ * @param {string} accountEmail - Account email
+ * @param {string} token - JWT token
+ * @returns {boolean} - True if session was deleted
+ */
+async function deleteAccountSession(accountEmail, token) {
+  try {
+    const tokenHash = hashToken(token);
+    
+    const result = await pool.query(`
+      DELETE FROM account_sessions 
+      WHERE account_email = $1 AND token_hash = $2
+    `, [accountEmail, tokenHash]);
+    
+    console.log(`🚪 Session deleted for account: ${accountEmail}`);
+    return result.rowCount > 0;
+    
+  } catch (error) {
+    console.error('❌ Error deleting account session:', error);
+    return false;
+  }
+}
+
+/**
+ * Check if a profile belongs to an account (authorization)
+ * This ensures users can only access their own family's profiles
+ * @param {string} accountEmail - Account email
+ * @param {string} profileId - Profile/user ID
+ * @returns {boolean} - True if profile belongs to account
+ */
+async function profileBelongsToAccount(accountEmail, profileId) {
+  try {
+    const result = await pool.query(`
+      SELECT 1 FROM users 
+      WHERE user_id = $1 AND account_email = $2
+    `, [profileId, accountEmail]);
+    
+    const belongs = result.rows.length > 0;
+    console.log(`🔍 Profile ${profileId} belongs to ${accountEmail}: ${belongs}`);
+    return belongs;
+    
+  } catch (error) {
+    console.error('❌ Error checking profile ownership:', error);
+    return false;
+  }
+}
+
 /* User Authetication */
 async function ensureUser(userId) {
     try {
@@ -1615,32 +1958,40 @@ async function buildSmartContext(userId, mode, currentData, message) {
 }
 
 module.exports = {
-    pool,
-    ensureUser,
-    ensureUserWithProfile,
-    getUserProfile,
-    getUserData,
-    saveUserData, 
-    saveConversation,
-    createUserList,
-    addItemToList,
-    getUserLists,
-    updateListItemStatus, 
-    updateListItemText,
-    deleteListItem,
-    deleteUserList, 
-    createUserSchedule,
-    addEventToSchedule,
-    getUserSchedules,
-    updateEvent, 
-    deleteEvent, 
-    deleteUserSchedule,
-    createMemoryCategory, 
-    addMemoryItem,
-    getUserMemories,
-    updateMemoryItem, 
-    deleteMemoryItem, 
-    deleteMemoryCategory,
-    getAllUserData, 
-    buildSmartContext
+  pool,
+  ensureUser,
+  ensureUserWithProfile,
+  getUserProfile,
+  getUserData,
+  saveUserData, 
+  saveConversation,
+  createUserList,
+  addItemToList,
+  getUserLists,
+  updateListItemStatus, 
+  updateListItemText,
+  deleteListItem,
+  deleteUserList, 
+  createUserSchedule,
+  addEventToSchedule,
+  getUserSchedules,
+  updateEvent, 
+  deleteEvent, 
+  deleteUserSchedule,
+  createMemoryCategory, 
+  addMemoryItem,
+  getUserMemories,
+  updateMemoryItem, 
+  deleteMemoryItem, 
+  deleteMemoryCategory,
+  getAllUserData, 
+  buildSmartContext,
+  createFamilyAccount,
+  authenticateFamilyAccount,
+  getFamilyAccountWithProfiles,
+  createProfileInAccount,
+  createAccountSession,
+  verifyAccountSession,
+  deleteAccountSession,
+  profileBelongsToAccount
 };
