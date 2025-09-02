@@ -7,60 +7,52 @@ const {
   ensureUserWithProfile,
   getUserProfile,
   getUserData,
-  saveUserData, 
+  saveUserData,
   saveConversation,
   createUserList,
   addItemToList,
   getUserLists,
-  updateListItemStatus, 
+  updateListItemStatus,
   updateListItemText,
   deleteListItem,
-  deleteUserList, 
+  deleteUserList,
   createUserSchedule,
   addEventToSchedule,
   getUserSchedules,
-  updateEvent, 
-  deleteEvent, 
+  updateEvent,
+  deleteEvent,
   deleteUserSchedule,
-  createMemoryCategory, 
+  createMemoryCategory,
   addMemoryItem,
   getUserMemories,
-  updateMemoryItem, 
-  deleteMemoryItem, 
+  updateMemoryItem,
+  deleteMemoryItem,
   deleteMemoryCategory,
-  getAllUserData, 
-  buildSmartContext
+  getAllUserData,
+  buildSmartContext,
+  createFamilyAccount,
+  getFamilyAccountWithProfiles,
+  createProfileInAccount
 } = require('./database');
 const { EnhancedSmartActionProcessor } = require('./action-processor');
 
 
 const router = express.Router();
 
-const { body, validationResult } = require('express-validator');
 const { 
-  authenticateAccount, 
+  authenticateAccount,
   authorizeProfileAccess,
-  authRateLimit, 
+  authRateLimit,
   apiRateLimit,
-  cleanupSession,
   validateAuthRequest,
   securityHeaders
 } = require('./middleware/familyAuth');
 
-const { 
-  generateAccountToken, 
-  isValidEmail, 
+const {
   validatePassword,
   validateAccountName
 } = require('./utils/familyAuth');
-
-const { 
-  createFamilyAccount, 
-  authenticateFamilyAccount, 
-  getFamilyAccountWithProfiles,
-  createProfileInAccount,
-  createAccountSession
-} = require('./database');
+const { supabase } = require('./supabaseClient');
 
 // Apply security headers to all routes
 router.use(securityHeaders);
@@ -332,50 +324,33 @@ initializeSmartProcessor();
 // =============================================
 
 /**
- * POST /auth/signup - Create a new family account
- * This is where families register for the first time
+ * POST /auth/create-account - Create a new family account after Supabase signup
  */
-router.post('/auth/signup', 
+router.post('/auth/create-account',
   authRateLimit,
-  validateAuthRequest(['email', 'password', 'accountName']),
-  [
-    body('email')
-      .isEmail()
-      .normalizeEmail()
-      .withMessage('Please provide a valid email address'),
-    body('password')
-      .isLength({ min: 8 })
-      .withMessage('Password must be at least 8 characters long'),
-    body('accountName')
-      .trim()
-      .isLength({ min: 2, max: 50 })
-      .withMessage('Account name must be 2-50 characters long')
-  ],
+  validateAuthRequest(['accountName', 'password']),
   async (req, res) => {
     try {
-      console.log('📝 Family account signup request received');
-      
-      // Check validation errors from express-validator
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        console.log('❌ Validation errors:', errors.array());
-        return res.status(400).json({
-          error: 'Validation failed',
-          message: 'Please check your input data',
-          details: errors.array()
+      const authHeader = req.headers['authorization'];
+      const token = authHeader && authHeader.split(' ')[1];
+
+      if (!token) {
+        return res.status(401).json({
+          error: 'Authentication required',
+          message: 'Please login first'
         });
       }
 
-      const { email, password, accountName } = req.body;
-      
-      // Additional custom validation
-      if (!isValidEmail(email)) {
-        return res.status(400).json({
-          error: 'Invalid email',
-          message: 'Please provide a valid email address'
+      const { data: { user }, error } = await supabase.auth.getUser(token);
+      if (error || !user) {
+        return res.status(403).json({
+          error: 'Invalid token',
+          message: 'Token is invalid or expired'
         });
       }
-      
+
+      const { accountName, password } = req.body;
+
       const passwordValidation = validatePassword(password);
       if (!passwordValidation.isValid) {
         return res.status(400).json({
@@ -384,7 +359,7 @@ router.post('/auth/signup',
           requirements: passwordValidation.errors
         });
       }
-      
+
       const accountNameValidation = validateAccountName(accountName);
       if (!accountNameValidation.isValid) {
         return res.status(400).json({
@@ -393,30 +368,11 @@ router.post('/auth/signup',
           requirements: accountNameValidation.errors
         });
       }
-      
-      // Create the family account
-      const account = await createFamilyAccount(email, password, accountName);
-      
-      // Generate JWT token for immediate login
-      const token = generateAccountToken({
-        email: account.email,
-        accountName: account.account_name,
-        accountId: account.id
-      });
-      
-      // Create session record
-      const sessionData = {
-        userAgent: req.get('User-Agent'),
-        ipAddress: req.ip
-      };
-      await createAccountSession(account.email, token, sessionData);
-      
-      console.log(`✅ Family account created and logged in: ${accountName}`);
-      
-      // Return success with token
+
+      // Create the family account in our database
+      const account = await createFamilyAccount(user.email, password, accountName);
+
       res.status(201).json({
-        message: 'Family account created successfully',
-        token,
         account: {
           email: account.email,
           accountName: account.account_name,
@@ -425,20 +381,11 @@ router.post('/auth/signup',
           profiles: []
         }
       });
-      
     } catch (error) {
-      console.error('❌ Signup error:', error);
-      
-      if (error.message.includes('already exists')) {
-        return res.status(409).json({
-          error: 'Account exists',
-          message: 'An account with this email already exists'
-        });
-      }
-      
+      console.error('❌ Account creation error:', error);
       res.status(500).json({
-        error: 'Signup failed',
-        message: 'Unable to create account. Please try again.'
+        error: 'Account creation failed',
+        message: 'Unable to create account'
       });
     }
   }
@@ -448,66 +395,6 @@ router.post('/auth/signup',
  * POST /auth/login - Authenticate family account
  * This is where families log into their account
  */
-router.post('/auth/login',
-  authRateLimit,
-  validateAuthRequest(['email', 'password']),
-  async (req, res) => {
-    try {
-      console.log('🔐 Family account login request received');
-      
-      const { email, password } = req.body;
-      
-      // Authenticate the account
-      const account = await authenticateFamilyAccount(email, password);
-      
-      if (!account) {
-        console.log(`❌ Authentication failed for: ${email}`);
-        return res.status(401).json({
-          error: 'Authentication failed',
-          message: 'Invalid email or password'
-        });
-      }
-      
-      // Generate JWT token
-      const token = generateAccountToken({
-        email: account.email,
-        accountName: account.accountName,
-        accountId: account.id
-      });
-      
-      // Create session record
-      const sessionData = {
-        userAgent: req.get('User-Agent'),
-        ipAddress: req.ip
-      };
-      await createAccountSession(account.email, token, sessionData);
-      
-      // Get account with all profiles for the profile selector
-      const accountWithProfiles = await getFamilyAccountWithProfiles(account.email);
-      
-      console.log(`✅ Family account logged in: ${account.accountName} with ${accountWithProfiles.profileCount} profiles`);
-      
-      res.json({
-        message: 'Login successful',
-        token,
-        account: {
-          email: accountWithProfiles.email,
-          accountName: accountWithProfiles.accountName,
-          maxProfiles: accountWithProfiles.maxProfiles,
-          profileCount: accountWithProfiles.profileCount,
-          profiles: accountWithProfiles.profiles
-        }
-      });
-      
-    } catch (error) {
-      console.error('❌ Login error:', error);
-      res.status(500).json({
-        error: 'Login failed',
-        message: 'Unable to login. Please try again.'
-      });
-    }
-  }
-);
 
 /**
  * GET /auth/account - Get current account info with profiles
@@ -549,30 +436,6 @@ router.get('/auth/account',
   }
 );
 
-/**
- * POST /auth/logout - Logout from family account
- * Invalidates the current session
- */
-router.post('/auth/logout',
-  authenticateAccount,
-  cleanupSession,
-  async (req, res) => {
-    try {
-      console.log(`🚪 Account logged out: ${req.account.email}`);
-      
-      res.json({
-        message: 'Logged out successfully'
-      });
-      
-    } catch (error) {
-      console.error('❌ Logout error:', error);
-      res.status(500).json({
-        error: 'Logout failed',
-        message: 'Unable to logout properly'
-      });
-    }
-  }
-);
 
 // =============================================
 // PROFILE MANAGEMENT ROUTES (WITHIN ACCOUNT)
