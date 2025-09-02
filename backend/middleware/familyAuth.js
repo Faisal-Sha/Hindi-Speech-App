@@ -1,7 +1,7 @@
 // backend/middleware/familyAuth.js
 const rateLimit = require('express-rate-limit');
-const { verifyAccountToken } = require('../utils/familyAuth');
-const { verifyAccountSession, profileBelongsToAccount } = require('../database');
+const { supabase } = require('../supabaseClient');
+const { getFamilyAccountWithProfiles, profileBelongsToAccount } = require('../database');
 
 /**
  * Authentication middleware for family accounts
@@ -24,35 +24,35 @@ const authenticateAccount = async (req, res, next) => {
       });
     }
     
-    // First verify the JWT token structure
-    const decoded = verifyAccountToken(token);
-    if (!decoded) {
+    // Verify token with Supabase
+    const { data: { user }, error } = await supabase.auth.getUser(token);
+    if (error || !user) {
       console.log('❌ Invalid or expired token');
-      return res.status(403).json({ 
+      return res.status(403).json({
         error: 'Invalid token',
         message: 'Token is invalid or expired. Please login again.'
       });
     }
-    
-    // Then verify the session exists in database (more secure)
-    const session = await verifyAccountSession(token);
-    if (!session) {
-      console.log('❌ Session not found in database or expired');
-      return res.status(403).json({ 
-        error: 'Session expired',
-        message: 'Your session has expired. Please login again.'
+
+    // Get account information
+    const account = await getFamilyAccountWithProfiles(user.email);
+    if (!account) {
+      console.log('❌ Account not found for user');
+      return res.status(403).json({
+        error: 'Account not found',
+        message: 'No account linked with this user'
       });
     }
-    
+
     // Add account info to request object for use in routes
     req.account = {
-      email: session.account_email,
-      accountName: session.account_name,
-      isVerified: session.is_verified,
-      maxProfiles: session.max_profiles,
-      sessionId: session.id
+      email: account.email,
+      accountName: account.accountName,
+      isVerified: account.isVerified,
+      maxProfiles: account.maxProfiles,
+      profiles: account.profiles
     };
-    
+
     console.log(`✅ Account authenticated: ${req.account.accountName} (${req.account.email})`);
     next();
     
@@ -128,25 +128,24 @@ const optionalAccountAuth = async (req, res, next) => {
   try {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
-    
+
     if (token) {
-      const decoded = verifyAccountToken(token);
-      if (decoded) {
-        // Try to get session info
-        const session = await verifyAccountSession(token);
-        if (session) {
+      const { data: { user }, error } = await supabase.auth.getUser(token);
+      if (!error && user) {
+        const account = await getFamilyAccountWithProfiles(user.email);
+        if (account) {
           req.account = {
-            email: session.account_email,
-            accountName: session.account_name,
-            isVerified: session.is_verified,
-            maxProfiles: session.max_profiles,
-            sessionId: session.id
+            email: account.email,
+            accountName: account.accountName,
+            isVerified: account.isVerified,
+            maxProfiles: account.maxProfiles,
+            profiles: account.profiles
           };
           console.log(`✅ Optional auth successful: ${req.account.email}`);
         }
       }
     }
-    
+
     next();
   } catch (error) {
     console.error('❌ Optional auth error:', error);
@@ -219,22 +218,11 @@ const requireEmailVerification = (req, res, next) => {
  */
 const cleanupSession = async (req, res, next) => {
   try {
-    if (req.account?.sessionId) {
-      const { deleteAccountSession } = require('../database');
-      
-      // Get token from header to delete the specific session
-      const authHeader = req.headers['authorization'];
-      const token = authHeader && authHeader.split(' ')[1];
-      
-      if (token) {
-        await deleteAccountSession(req.account.email, token);
-        console.log(`🚪 Session cleaned up for: ${req.account.email}`);
-      }
-    }
+    // Supabase manages sessions; nothing to clean up server-side
     next();
   } catch (error) {
     console.error('❌ Session cleanup error:', error);
-    next(); // Continue even if cleanup fails
+    next();
   }
 };
 

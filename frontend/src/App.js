@@ -9,6 +9,7 @@ import UserSelector from './components/UserSelector';
 import ContentDisplay from './components/ContentDisplay';
 import useDataManagement from './hooks/useDataManagement';
 import useSpeechRecognition from './hooks/useSpeechRecognition';
+import { supabase } from './services/supabaseClient';
 
 function App() {
   // =====================================
@@ -62,45 +63,44 @@ function App() {
   const checkExistingAuth = async () => {
     try {
       console.log('🔍 Checking for existing authentication...');
-      
-      // Get token from localStorage
-      const savedToken = localStorage.getItem('familyAuthToken');
-      
-      if (!savedToken) {
-        console.log('❌ No saved token found');
+
+      const { data: { session } } = await supabase.auth.getSession();
+
+      if (!session) {
+        console.log('❌ No active session');
         setIsCheckingAuth(false);
         return;
       }
-      
+
+      const token = session.access_token;
+
       // Verify token with backend
       const response = await fetch('http://localhost:3001/auth/account', {
         headers: {
-          'Authorization': `Bearer ${savedToken}`
+          'Authorization': `Bearer ${token}`
         }
       });
-      
+
       if (response.ok) {
         const data = await response.json();
         console.log('✅ Existing authentication valid:', data.account);
-        
+
         // Restore authentication state
-        setAuthToken(savedToken);
+        setAuthToken(token);
         setFamilyAccount(data.account);
         setIsAuthenticated(true);
-        
+
         // If they only have one profile, auto-select it
         if (data.account.profiles && data.account.profiles.length === 1) {
           handleUserSelect(data.account.profiles[0]);
         }
-        
+
       } else {
-        console.log('❌ Saved token is invalid');
-        localStorage.removeItem('familyAuthToken');
+        console.log('❌ Session token is invalid');
       }
-      
+
     } catch (error) {
       console.error('❌ Error checking authentication:', error);
-      localStorage.removeItem('familyAuthToken');
     } finally {
       setIsCheckingAuth(false);
     }
@@ -109,7 +109,7 @@ function App() {
   // Handle successful authentication (login or signup)
   const handleAuthSuccess = (account, token) => {
     console.log('✅ Authentication successful:', account);
-    
+
     setAuthToken(token);
     setFamilyAccount(account);
     setIsAuthenticated(true);
@@ -126,32 +126,21 @@ function App() {
   const handleLogout = async () => {
     try {
       console.log('🚪 Logging out...');
-      
-      // Call logout endpoint to cleanup session
-      if (authToken) {
-        await fetch('http://localhost:3001/auth/logout', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${authToken}`
-          }
-        });
-      }
-      
+      // Sign out of Supabase
+      await supabase.auth.signOut();
+
       // Clear local state
-      localStorage.removeItem('familyAuthToken');
       setAuthToken(null);
       setFamilyAccount(null);
       setIsAuthenticated(false);
       setCurrentUser(null);
       setIsSelectingUser(true);
       setMessages([]);
-      
+
       console.log('✅ Logged out successfully');
-      
+
     } catch (error) {
       console.error('❌ Error during logout:', error);
-      // Still clear local state even if backend call fails
-      localStorage.removeItem('familyAuthToken');
       setAuthToken(null);
       setFamilyAccount(null);
       setIsAuthenticated(false);

@@ -1,6 +1,7 @@
 
 import React, { useState } from 'react';
 import './AuthScreen.css';
+import { supabase } from '../services/supabaseClient';
 
 const AuthScreen = ({ onAuthSuccess }) => {
   // =====================================
@@ -37,35 +38,67 @@ const AuthScreen = ({ onAuthSuccess }) => {
 
     try {
       console.log(`🔐 Attempting ${isLogin ? 'login' : 'signup'}...`);
-      
-      // Determine endpoint and payload
-      const endpoint = isLogin ? '/auth/login' : '/auth/signup';
-      const payload = isLogin 
-        ? { email: formData.email, password: formData.password }
-        : { email: formData.email, password: formData.password, accountName: formData.accountName };
 
-      // Make API request
-      const response = await fetch(`http://localhost:3001${endpoint}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload)
-      });
+      if (isLogin) {
+        // Supabase login
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email: formData.email,
+          password: formData.password
+        });
 
-      const data = await response.json();
+        if (error) {
+          console.error('❌ Login failed:', error);
+          setError(error.message);
+        } else if (data.session) {
+          const token = data.session.access_token;
 
-      if (response.ok) {
-        console.log(`✅ ${isLogin ? 'Login' : 'Signup'} successful:`, data);
-        
-        // Store the JWT token in localStorage
-        localStorage.setItem('familyAuthToken', data.token);
-        
-        // Call the success callback with account data
-        onAuthSuccess(data.account, data.token);
+          // Get account info from backend
+          const response = await fetch('http://localhost:3001/auth/account', {
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          });
+          const accountData = await response.json();
+
+          if (response.ok) {
+            onAuthSuccess(accountData.account, token);
+          } else {
+            setError(accountData.message || 'Login failed');
+          }
+        }
       } else {
-        console.error(`❌ ${isLogin ? 'Login' : 'Signup'} failed:`, data);
-        setError(data.message || `${isLogin ? 'Login' : 'Signup'} failed`);
+        // Supabase signup
+        const { data, error } = await supabase.auth.signUp({
+          email: formData.email,
+          password: formData.password
+        });
+
+        if (error) {
+          console.error('❌ Signup failed:', error);
+          setError(error.message);
+        } else if (data.session) {
+          const token = data.session.access_token;
+
+          // Create family account in backend
+          const response = await fetch('http://localhost:3001/auth/create-account', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({
+              accountName: formData.accountName,
+              password: formData.password
+            })
+          });
+          const accountData = await response.json();
+
+          if (response.ok) {
+            onAuthSuccess(accountData.account, token);
+          } else {
+            setError(accountData.message || 'Signup failed');
+          }
+        }
       }
 
     } catch (error) {
