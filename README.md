@@ -20,11 +20,34 @@ Node.js (version 14 or higher)
 A modern web browser that supports Web Speech API (Chrome, Edge, Safari)
 Microphone access
 
-Installation
+### Docker Setup
 
-Clone the repository
-  git clone <your-repo-url>
-  cd hindi-voice-assistant
+Run the entire application (frontend, backend, and PostgreSQL database) using Docker.
+
+#### Development environment
+
+1. Copy the backend environment template and update any secrets:
+   ```bash
+   cp backend/.env.example backend/.env
+   ```
+2. Start all services with live-reload support:
+   ```bash
+   docker compose -f docker-compose.dev.yml up --build
+   ```
+3. Visit the app at [http://localhost:3000](http://localhost:3000). The backend API will be exposed on port `3001` and PostgreSQL on `5432`.
+
+#### Production build
+
+1. Provide the required environment variables (for example by exporting them or using a `.env` file next to the compose file).
+2. Build and start the containers:
+   ```bash
+   docker compose -f docker-compose.prod.yml up --build -d
+   ```
+3. The production-ready frontend will be available at [http://localhost:8080](http://localhost:8080) and the backend API remains reachable on port `3001`.
+
+To stop the stack use `docker compose ... down` with the same compose file that was used to start it. The PostgreSQL data will persist in the named Docker volume `postgres-data`.
+
+### Manual setup
 
 Install dependencies
   npm install
