@@ -38,14 +38,28 @@ Run the entire application (frontend, backend, and PostgreSQL database) using Do
 
 #### Production build
 
-1. Provide the required environment variables (for example by exporting them or using a `.env` file next to the compose file).
-2. Build and start the containers:
+1. Provide the required environment variables (for example by exporting them or by creating a `.env` file next to the compose file). At minimum set `SERVER_NAME` to the public domain that will terminate TLS and the backend secrets described in `backend/.env.example`. Example:
+   ```env
+   SERVER_NAME=voice.example.com
+   FRONTEND_URL=https://voice.example.com
+   DB_PASSWORD=super-secret
+   DB_NAME=personal_assistant
+   CERTBOT_RENEW_INTERVAL=12h # optional, defaults to 12 hours
+   ```
+2. Request an initial TLS certificate (only required once per domain). Replace the email and domain with your own values:
+   ```bash
+   docker compose -f docker-compose.prod.yml run --rm certbot \
+     certonly --webroot -w /var/www/certbot \
+     -d "$SERVER_NAME" --email you@example.com --agree-tos --no-eff-email
+   ```
+   The nginx container serves a self-signed certificate until a real one is issued.
+3. Build and start the containers:
    ```bash
    docker compose -f docker-compose.prod.yml up --build -d
    ```
-3. The production-ready frontend will be available at [http://localhost:8080](http://localhost:8080) and the backend API remains reachable on port `3001`.
+4. Access the application at `https://$SERVER_NAME`. Port `80` remains open so Certbot can renew the certificate using the HTTP challenge.
 
-To stop the stack use `docker compose ... down` with the same compose file that was used to start it. The PostgreSQL data will persist in the named Docker volume `postgres-data`.
+To stop the stack use `docker compose ... down` with the same compose file that was used to start it. The PostgreSQL data persists in the named Docker volume `postgres-data`, and TLS assets live in `certbot-certs`.
 
 ### Manual setup
 

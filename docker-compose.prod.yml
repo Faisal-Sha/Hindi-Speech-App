@@ -1,7 +1,7 @@
 version: "3.9"
 
 services:
-  frontend:
+  nginx:
     build:
       context: ./frontend
       target: production
@@ -9,8 +9,14 @@ services:
         NODE_VERSION: 20
     depends_on:
       - backend
+    environment:
+      - SERVER_NAME=${SERVER_NAME:-localhost}
     ports:
-      - "8080:80"
+      - "80:80"
+      - "443:443"
+    volumes:
+      - certbot-www:/var/www/certbot
+      - certbot-certs:/etc/letsencrypt
 
   backend:
     build:
@@ -21,7 +27,7 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3001
-      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:8080}
+      - FRONTEND_URL=${FRONTEND_URL:-https://localhost}
       - DB_HOST=postgres
       - DB_PORT=5432
       - DB_USER=postgres
@@ -46,5 +52,17 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data
 
+  certbot:
+    image: certbot/certbot:latest
+    depends_on:
+      - nginx
+    entrypoint: /bin/sh
+    command: -c "trap exit TERM INT; while :; do certbot renew --webroot -w /var/www/certbot; sleep ${CERTBOT_RENEW_INTERVAL:-12h}; done"
+    volumes:
+      - certbot-www:/var/www/certbot
+      - certbot-certs:/etc/letsencrypt
+
 volumes:
   postgres-data:
+  certbot-www:
+  certbot-certs:
