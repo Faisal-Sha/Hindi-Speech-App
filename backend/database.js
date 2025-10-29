@@ -696,42 +696,72 @@ async function updateListItemText(userId, listName, itemId, newText) {
 }
 
 
-async function deleteListItem(userId, listName, itemId) {
+async function deleteListItem(userId, listName, itemId, options = {}) {
   try {
     console.log(`🗑️ DEBUGGING deleteListItem:`);
     console.log(`   - userId: ${userId}`);
     console.log(`   - listName: "${listName}"`);
     console.log(`   - itemId: ${itemId}`);
+    console.log(`   - options:`, options);
     
-    // STEP 1: Check if the item exists before deleting
-    const itemCheck = await pool.query(`
-      SELECT li.id, li.item_text, ul.list_name
-      FROM list_items li
-      JOIN user_lists ul ON li.list_id = ul.id
-      WHERE li.id = $1 AND ul.user_id = $2 AND ul.list_name = $3
-    `, [itemId, userId, listName]);
+    const { listId: providedListId } = options;
     
-    console.log(`   - Item check result: ${itemCheck.rows.length} rows found`);
-    if (itemCheck.rows.length > 0) {
-      const item = itemCheck.rows[0];
-      console.log(`   - Found item to delete: ID ${item.id}, Text "${item.item_text}"`);
+    let resolvedListId = providedListId || null;
+    let resolvedListName = listName;
+    
+    // STEP 1: Resolve list ID and validate ownership
+    if (resolvedListId) {
+      const listCheck = await pool.query(`
+        SELECT id, list_name 
+        FROM user_lists 
+        WHERE user_id = $1 AND id = $2
+      `, [userId, resolvedListId]);
+      
+      if (listCheck.rows.length === 0) {
+        throw new Error(`List with ID ${resolvedListId} not found for user ${userId}`);
+      }
+      
+      resolvedListName = listCheck.rows[0].list_name;
     } else {
-      console.error(`   ❌ No item found with ID ${itemId} in list "${listName}" for user ${userId}`);
-      throw new Error(`Item with ID ${itemId} not found in list "${listName}" for user ${userId}`);
+      const listLookup = await pool.query(`
+        SELECT id, list_name 
+        FROM user_lists 
+        WHERE user_id = $1 AND list_name = $2
+      `, [userId, listName]);
+      
+      if (listLookup.rows.length === 0) {
+        throw new Error(`List "${listName}" not found for user ${userId}`);
+      }
+      
+      resolvedListId = listLookup.rows[0].id;
+      resolvedListName = listLookup.rows[0].list_name;
     }
     
-    // STEP 2: Perform the deletion
-    console.log(`   - Attempting to delete item ${itemId}`);
+    console.log(`   - Resolved list: ID ${resolvedListId}, Name "${resolvedListName}"`);
+    
+    // STEP 2: Check if the item exists before deleting
+    const itemCheck = await pool.query(`
+      SELECT li.id, li.item_text
+      FROM list_items li
+      WHERE li.id = $1 AND li.list_id = $2
+    `, [itemId, resolvedListId]);
+    
+    console.log(`   - Item check result: ${itemCheck.rows.length} rows found`);
+    if (itemCheck.rows.length === 0) {
+      throw new Error(`Item with ID ${itemId} not found in list "${resolvedListName}" for user ${userId}`);
+    }
+    
+    const item = itemCheck.rows[0];
+    console.log(`   - Found item to delete: ID ${item.id}, Text "${item.item_text}"`);
+    
+    // STEP 3: Perform the deletion
+    console.log(`   - Attempting to delete item ${itemId} from list ID ${resolvedListId}`);
     
     const result = await pool.query(`
       DELETE FROM list_items 
-      WHERE id = $1 
-      AND list_id = (
-        SELECT id FROM user_lists 
-        WHERE user_id = $2 AND list_name = $3
-      )
+      WHERE id = $1 AND list_id = $2
       RETURNING *
-    `, [itemId, userId, listName]);
+    `, [itemId, resolvedListId]);
     
     console.log(`   - Delete result: ${result.rows.length} rows affected`);
     
@@ -742,7 +772,8 @@ async function deleteListItem(userId, listName, itemId) {
     const deletedItem = result.rows[0];
     console.log(`   ✅ Successfully deleted item:`, {
       id: deletedItem.id,
-      text: deletedItem.item_text
+      text: deletedItem.item_text,
+      listId: resolvedListId
     });
     
     return deletedItem;
@@ -754,22 +785,45 @@ async function deleteListItem(userId, listName, itemId) {
   }
 }
 
-async function deleteUserList(userId, listName) {
+async function deleteUserList(userId, listName, options = {}) {
   try {
-    console.log(`🗑️ Deleting entire list "${listName}" for user ${userId}`);
+    const { listId: providedListId } = options;
+    
+    console.log(`🗑️ Deleting entire list "${listName}" for user ${userId}`, {
+      providedListId
+    });
     
     // Step 1: Find the list and get its ID
-    const listQuery = await pool.query(
-      'SELECT id, list_name FROM user_lists WHERE user_id = $1 AND list_name = $2',
-      [userId, listName]
-    );
+    let listId = providedListId || null;
+    let resolvedListName = listName;
     
-    if (listQuery.rows.length === 0) {
-      throw new Error(`List "${listName}" not found for user ${userId}`);
+    if (listId) {
+      const listCheck = await pool.query(
+        'SELECT id, list_name FROM user_lists WHERE user_id = $1 AND id = $2',
+        [userId, listId]
+      );
+      
+      if (listCheck.rows.length === 0) {
+        throw new Error(`List with ID ${listId} not found for user ${userId}`);
+      }
+      
+      resolvedListName = listCheck.rows[0].list_name;
+      listId = listCheck.rows[0].id;
+    } else {
+      const listQuery = await pool.query(
+        'SELECT id, list_name FROM user_lists WHERE user_id = $1 AND list_name = $2',
+        [userId, listName]
+      );
+    
+      if (listQuery.rows.length === 0) {
+        throw new Error(`List "${listName}" not found for user ${userId}`);
+      }
+      
+      listId = listQuery.rows[0].id;
+      resolvedListName = listQuery.rows[0].list_name;
     }
     
-    const listId = listQuery.rows[0].id;
-    console.log(`📋 Found list "${listName}" with ID: ${listId}`);
+    console.log(`📋 Found list "${resolvedListName}" with ID: ${listId}`);
     
     // Step 2: Delete all items in the list first (foreign key constraint)
     const deleteItemsResult = await pool.query(
@@ -1262,20 +1316,49 @@ async function addMemoryItem(userId, categoryName, memoryKey, memoryValue, optio
   });
   
   try {
-      // FIXED: Use proper PostgreSQL array format for tags
-      const memory_type = 'fact';
-      const importance = 0;
-      const expires_at = null;
-      const is_private = false;
-      const tagsArray = []; // Use actual empty array, not string
+      const {
+        type = 'fact',
+        importance = 0,
+        tags = [],
+        expiresAt = null,
+        isPrivate = false
+      } = options || {};
+
+      // Normalize key/value inputs
+      let preparedKey = typeof memoryKey === 'string' ? memoryKey.trim() : '';
+      if (!preparedKey && memoryKey !== undefined && memoryKey !== null) {
+        preparedKey = String(memoryKey).trim();
+      }
+      const preparedValue = (memoryValue === undefined || memoryValue === null)
+        ? ''
+        : (typeof memoryValue === 'string'
+            ? memoryValue.trim()
+            : String(memoryValue).trim());
       
-      console.log('🔍 [DEEP DEBUG] Using safe defaults:', {
+      if (!preparedKey) {
+        preparedKey = preparedValue
+          ? preparedValue.slice(0, 64)
+          : `Memory ${new Date().toISOString()}`;
+      }
+
+      // Normalize option values for database storage
+      const memory_type = type || 'fact';
+      const normalizedImportance = Number.isFinite(importance) ? importance : 0;
+      const tagsArray = Array.isArray(tags)
+        ? tags.filter(Boolean)
+        : (tags ? [tags] : []);
+      const expires_at = expiresAt || null;
+      const is_private = Boolean(isPrivate);
+      
+      console.log('🔍 [DEEP DEBUG] Using normalized values:', {
         memory_type,
-        importance,
+        importance: normalizedImportance,
         expires_at,
         is_private,
         tagsArray,
-        tagsArrayType: typeof tagsArray
+        tagsArrayType: Array.isArray(tagsArray) ? 'array' : typeof tagsArray,
+        preparedKey,
+        preparedValue
       });
 
       console.log(`🔍 [DEEP DEBUG] Step 1: Finding category "${categoryName}"...`);
@@ -1350,7 +1433,16 @@ async function addMemoryItem(userId, categoryName, memoryKey, memoryValue, optio
       console.log('🔍 [DEEP DEBUG] Step 2: Preparing SQL query...');
       
       // FIXED: Use array format for PostgreSQL tags column
-      const queryParams = [targetCategoryId, memoryKey, memoryValue, memory_type, importance, tagsArray, expires_at, is_private];
+      const queryParams = [
+        targetCategoryId,
+        preparedKey,
+        preparedValue,
+        memory_type,
+        normalizedImportance,
+        tagsArray,
+        expires_at,
+        is_private
+      ];
       console.log('🔍 [DEEP DEBUG] Query parameters:', queryParams);
       
       const sqlQuery = `

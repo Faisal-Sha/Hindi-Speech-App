@@ -854,12 +854,27 @@ router.post('/chat', async (req, res) => {
     if (allActions.length > 0) {
       console.log(`🎯 Processing ${allActions.length} actions/queries`);
       
-      for (const action of allActions) {
+      for (const originalAction of allActions) {
         try {
-          console.log(`🤖 Processing: ${action.type} - ${action.intent || 'query'}`);
+          const actionWithMode = {
+            ...originalAction,
+            metadata: {
+              ...(originalAction.metadata || {}),
+              mode: originalAction.metadata?.mode || mode
+            },
+            data: originalAction.data ? {
+              ...originalAction.data,
+              metadata: {
+                ...(originalAction.data.metadata || {}),
+                mode: originalAction.data.metadata?.mode || mode
+              }
+            } : originalAction.data
+          };
+
+          console.log(`🤖 Processing: ${actionWithMode.type} - ${actionWithMode.intent || 'query'}`);
           
           // Smart processor handles everything (actions AND queries)
-          const result = await smartProcessor.processAction(action, userId);
+          const result = await smartProcessor.processAction(actionWithMode, userId);
           actionResults.push(result);
           
           // Enhance response with results
@@ -877,11 +892,11 @@ router.post('/chat', async (req, res) => {
           
           console.log(`✅ Action/Query completed:`, result);
         } catch (error) {
-          console.error(`❌ Error processing action/query:`, action, error);
+          console.error(`❌ Error processing action/query:`, originalAction, error);
           actionResults.push({
             success: false,
             error: error.message,
-            action: action.type
+            action: originalAction.type
           });
         }
       }

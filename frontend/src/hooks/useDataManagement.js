@@ -172,11 +172,7 @@ const useDataManagement = (messages, authToken) => {
 
     } catch (error) {
       console.error('❌ Error loading user data:', error);
-      
-      // Reset to empty state on error
-      setUserLists({});
-      setUserSchedules({});
-      setUserMemory({});
+      // Keep previous data so UI does not clear out on transient errors
     } finally {
       setIsLoading(false);
     }

@@ -376,14 +376,12 @@ function App() {
       };
       setMessages(prev => [...prev, aiMessage]);
   
-      // Handle AI actions if any were returned
-      if (aiResponse.actions && aiResponse.actions.length > 0) {
-        console.log('🔄 Processing AI actions:', aiResponse.actions);
-        const actionsProcessed = await handleAiActions(aiResponse.actions, currentUser.user_id, authToken);
-        
-        if (actionsProcessed) {
-          console.log('✅ AI actions completed, data updated');
-        }
+      // Backend already processed actions; refresh data if anything changed
+      const actionsHandled = (aiResponse.actionResults && aiResponse.actionResults.length > 0) ||
+        (aiResponse.actions && aiResponse.actions.length > 0);
+      if (actionsHandled) {
+        console.log('🔄 Reloading data after AI-processed actions');
+        await loadUserData(currentUser.user_id);
       }
   
     } catch (error) {

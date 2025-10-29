@@ -56,45 +56,67 @@ const ContentDisplay = ({
 
   // ===== UTILITY FUNCTIONS =====
   const formatDate = (dateInput) => {
-    if (!dateInput) return 'recently';
+    if (!dateInput) return 'Just now';
     
     try {
       let date;
       
       if (dateInput instanceof Date) {
         date = dateInput;
-      } else if (typeof dateInput === 'string') {
+      } else if (typeof dateInput === 'string' || typeof dateInput === 'number') {
         date = new Date(dateInput);
+      } else if (dateInput?.toDate) {
+        date = dateInput.toDate();
       } else {
-        return 'recently';
+        return 'Just now';
       }
       
       if (isNaN(date.getTime())) {
-        return 'recently';
+        return 'Just now';
       }
       
       const now = new Date();
-      const diffTime = Math.abs(now - date);
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      const diffMs = now.getTime() - date.getTime();
+      const diffSeconds = Math.floor(diffMs / 1000);
+      const diffMinutes = Math.floor(diffSeconds / 60);
+      const diffHours = Math.floor(diffMinutes / 60);
+      const diffDays = Math.floor(diffHours / 24);
       
-      if (diffDays === 0) {
-        return `Today ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
-      } else if (diffDays === 1) {
-        return `Yesterday ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
-      } else if (diffDays <= 7) {
-        return `${diffDays} days ago`;
-      } else {
-        return date.toLocaleDateString();
+      if (diffSeconds < 45) {
+        return 'Just now';
       }
+      
+      if (diffMinutes < 60) {
+        return `${diffMinutes} minute${diffMinutes === 1 ? '' : 's'} ago`;
+      }
+      
+      if (diffHours < 24) {
+        return `Today ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+      }
+      
+      if (diffDays === 1) {
+        return `Yesterday ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+      }
+      
+      if (diffDays < 7) {
+        return `${diffDays} days ago`;
+      }
+      
+      const options = { month: 'short', day: 'numeric' };
+      if (date.getFullYear() !== now.getFullYear()) {
+        options.year = 'numeric';
+      }
+      
+      return date.toLocaleDateString(undefined, options);
       
     } catch (error) {
       console.warn('Error formatting date:', error);
-      return 'recently';
+      return 'Just now';
     }
   };
 
   // ===== LIST ITEM FUNCTIONS =====
-  const toggleItemCompletion = useCallback((listName, item) => {
+  const toggleItemCompletion = useCallback((listName, item, listId) => {
     if (isEditingRef.current) return; // Don't toggle if editing
     
     console.log(`🔄 Toggling completion for item in list: ${listName}`, item);
@@ -108,12 +130,13 @@ const ContentDisplay = ({
           target: listName,
           operation: 'update_item',
           values: [],
-          metadata: {
-            itemId: item.id,
-            updates: { completed: !item.completed },
-            listName: listName,
-            confidence: 'high'
-          }
+            metadata: {
+              itemId: item.id,
+              updates: { completed: !item.completed },
+              listName: listName,
+              ...(listId ? { listId } : {}),
+              confidence: 'high'
+            }
         }
       });
     }
@@ -126,7 +149,7 @@ const ContentDisplay = ({
     setEditText(typeof item === 'string' ? item : item.text || item.name || '');
   }, []);
 
-  const saveEdit = useCallback(async (listName, item) => {
+  const saveEdit = useCallback(async (listName, item, listId) => {
     if (!editText.trim()) {
       cancelEdit();
       return;
@@ -143,12 +166,13 @@ const ContentDisplay = ({
           target: listName,
           operation: 'update_item',
           values: [],
-          metadata: {
-            itemId: item.id,
-            updates: { text: editText.trim() },
-            listName: listName,
-            confidence: 'high'
-          }
+            metadata: {
+              itemId: item.id,
+              updates: { text: editText.trim() },
+              listName: listName,
+              ...(listId ? { listId } : {}),
+              confidence: 'high'
+            }
         }
       });
     }
@@ -165,7 +189,7 @@ const ContentDisplay = ({
     isEditingRef.current = false;
   }, []);
 
-  const deleteItem = useCallback((listName, item) => {
+  const deleteItem = useCallback((listName, item, listId) => {
     const itemName = typeof item === 'string' ? item : item.text || item.name || 'this item';
     
     if (window.confirm(`Are you sure you want to delete "${itemName}"?`)) {
@@ -183,6 +207,7 @@ const ContentDisplay = ({
             metadata: {
               itemId: item.id,
               listName: listName,
+              ...(listId ? { listId } : {}),
               confidence: 'high'
             }
           }
@@ -191,7 +216,7 @@ const ContentDisplay = ({
     }
   }, [onDeleteListItem]);
 
-  const deleteList = useCallback((listName) => {
+  const deleteList = useCallback((listName, listId) => {
     if (window.confirm(`Are you sure you want to delete the entire list "${listName}"? This will remove all items in this list.`)) {
       console.log(`🗑️ Deleting entire list: ${listName}`);
       
@@ -205,6 +230,7 @@ const ContentDisplay = ({
             operation: 'delete_list',
             values: [],
             metadata: {
+              ...(listId ? { listId } : {}),
               confidence: 'high'
             }
           }
@@ -527,28 +553,32 @@ const ContentDisplay = ({
         ) : (
           <>
             <h3 className="content-title">📝 Your Lists</h3>
-            {Object.entries(userLists).map(([listId, list]) => (
+            {Object.entries(userLists).map(([listKey, list]) => {
+              const resolvedListName = list.name || listKey;
+              const resolvedListId = Number.isFinite(Number(list.id)) ? Number(list.id) : null;
+              
+              return (
               <CollapsibleSection
-                key={listId}
-                title={`📝 ${list.name || listId}`}
+                key={listKey}
+                title={`📝 ${resolvedListName}`}
                 count={list.items?.length || 0}
                 subtitle={`Created ${formatDate(list.created)}`}
                 defaultExpanded={true}
                 showDeleteButton={true}
-                onDelete={() => deleteList(list.name || listId)}
+                onDelete={() => deleteList(resolvedListName, resolvedListId)}
               >
                 {!list.items || list.items.length === 0 ? (
                   <div className="empty-list-message">
-                    No items yet. Add items by saying "Add milk to {list.name || listId}"
+                    No items yet. Add items by saying "Add milk to {resolvedListName}"
                   </div>
                 ) : (
                   <div className="list-items">
                     {list.items.map((item, index) => {
-                      const isEditing = editingItem?.listName === (list.name || listId) && editingItem?.itemId === item.id;
+                      const isEditing = editingItem?.listName === resolvedListName && editingItem?.itemId === item.id;
                       
                       return (
                         <div key={item.id || index} className={`list-item interactive ${item.completed ? 'completed' : ''}`}>
-                          <div className="list-item-main" onClick={() => toggleItemCompletion(list.name || listId, item)}>
+                          <div className="list-item-main" onClick={() => toggleItemCompletion(resolvedListName, item, resolvedListId)}>
                             <span className="list-item-icon">
                               {item.completed ? '✅' : '⭕'}
                             </span>
@@ -560,12 +590,12 @@ const ContentDisplay = ({
                                 onChange={(e) => setEditText(e.target.value)}
                                 onKeyPress={(e) => {
                                   if (e.key === 'Enter') {
-                                    saveEdit(list.name || listId, item);
+                                    saveEdit(resolvedListName, item, resolvedListId);
                                   } else if (e.key === 'Escape') {
                                     cancelEdit();
                                   }
                                 }}
-                                onBlur={() => saveEdit(list.name || listId, item)}
+                                onBlur={() => saveEdit(resolvedListName, item, resolvedListId)}
                                 autoFocus
                                 className="edit-input"
                               />
@@ -579,13 +609,13 @@ const ContentDisplay = ({
                           <div className="list-item-actions">
                             {isEditing ? (
                               <>
-                                <button onClick={() => saveEdit(list.name || listId, item)} className="save-btn">✅</button>
+                                <button onClick={() => saveEdit(resolvedListName, item, resolvedListId)} className="save-btn">✅</button>
                                 <button onClick={cancelEdit} className="cancel-btn">❌</button>
                               </>
                             ) : (
                               <>
-                                <button onClick={() => startEditing(list.name || listId, item)} className="edit-btn">✏️</button>
-                                <button onClick={() => deleteItem(list.name || listId, item)} className="delete-btn">🗑️</button>
+                                <button onClick={() => startEditing(resolvedListName, item)} className="edit-btn">✏️</button>
+                                <button onClick={() => deleteItem(resolvedListName, item, resolvedListId)} className="delete-btn">🗑️</button>
                               </>
                             )}
                           </div>
@@ -595,7 +625,8 @@ const ContentDisplay = ({
                   </div>
                 )}
               </CollapsibleSection>
-            ))}
+            );
+            })}
           </>
         )}
       </div>
@@ -867,6 +898,7 @@ const ContentDisplay = ({
   switch (currentMode) {
     case 'lists':
       return renderListsContent();
+    case 'schedules':
     case 'schedule':
       return renderSchedulesContent();
     case 'memory':

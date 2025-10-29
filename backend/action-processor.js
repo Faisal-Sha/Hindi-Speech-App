@@ -150,12 +150,32 @@ class EnhancedSmartActionProcessor {
     /**
      * Handle smart addition with AI matching
      */
-    async handleSmartAdd(data, userId) {
-      const { target, operation, values, metadata } = data;
+  async handleSmartAdd(data, userId) {
+      const { target, operation, values, metadata = {} } = data;
+      const normalizedOperation = (operation || '').toLowerCase();
+      const normalizedTarget = (target || '').toLowerCase();
+      const currentMode = metadata.mode;
+
+      // If the AI tried to add to a list while we're in memory mode, treat it as memory storage instead
+      if (
+        normalizedOperation === 'add_to_list' &&
+        (currentMode === 'memory' || normalizedTarget.includes('memory'))
+      ) {
+        console.log('🧠 Detected memory-mode list operation – rerouting to memory storage');
+        return await this.handleSmartRemember({
+          target,
+          operation: 'store_memory',
+          values,
+          metadata: {
+            ...metadata,
+            reroutedFrom: 'add_to_list_memory_mode'
+          }
+        }, userId);
+      }
       
       console.log(`➕ Smart adding to: "${target}"`);
       
-      switch(operation) {
+      switch(normalizedOperation) {
         case 'add_to_list':
           const allLists = await this.db.getUserLists(userId);
           const targetList = await this.aiMatcher.findBestListMatch(target, allLists);
@@ -186,6 +206,7 @@ class EnhancedSmartActionProcessor {
             }
           };
           
+        case 'add_to_schedule':  // Handle add_to_schedule the same as add_event
         case 'add_event':
           const allSchedules = await this.db.getUserSchedules(userId);
           const targetSchedule = await this.aiMatcher.findBestScheduleMatch(target, allSchedules);
@@ -201,8 +222,10 @@ class EnhancedSmartActionProcessor {
           
           // Add event to matched schedule
           for (const event of values) {
+            console.log('Adding event:', event);
             const eventDetails = this.parseEventDetails(event, metadata);
-            await this.db.addEventToSchedule(userId, targetSchedule, eventDetails);
+            console.log('Event details:', eventDetails);
+            await this.db.addEventToSchedule(userId, targetSchedule, eventDetails.title, eventDetails.startTime, eventDetails);
           }
           
           return {
@@ -216,23 +239,54 @@ class EnhancedSmartActionProcessor {
             }
           };
           
-        case 'store_memory':
-          const allMemory = await this.db.getUserMemories(userId);
-          const targetCategory = await this.aiMatcher.findBestMemoryMatch(target, allMemory);
+        case 'add_to_memory':
+        case 'store_memory': {
+          const existingMemory = await this.db.getUserMemories(userId);
+          const memoryValues = Array.isArray(values) ? values : (values ? [values] : []);
+          const requestedCategory = metadata?.categoryName || target;
           
-          if (!targetCategory) {
-            // Create new memory category
-            return await this.handleSmartCreate({
-              target,
-              operation: 'create_memory',
-              values
-            }, userId);
+          let matchedCategory = null;
+          if (existingMemory && Object.keys(existingMemory).length > 0) {
+            matchedCategory = await this.aiMatcher.findBestMemoryMatch(
+              requestedCategory || target,
+              existingMemory,
+              memoryValues
+            );
           }
           
-          // Add memory items
-          for (const item of values) {
-            const memoryItem = this.parseMemoryItem(item);
-            await this.db.addMemoryItem(userId, targetCategory, memoryItem);
+          const targetCategory = (
+            matchedCategory ||
+            requestedCategory ||
+            target ||
+            'General'
+          );
+          
+          if (!memoryValues.length) {
+            console.warn('⚠️ No memory values provided to store. Skipping.');
+            return {
+              success: false,
+              type: 'memory_skipped',
+              details: {
+                reason: 'No values supplied for memory storage',
+                targetCategory,
+                originalRequest: target
+              }
+            };
+          }
+          
+          console.log(`🧠 Storing ${memoryValues.length} memory item(s) in category "${targetCategory}"`);
+          
+          const createdCategory = !(existingMemory && existingMemory[targetCategory]);
+          
+          for (const rawItem of memoryValues) {
+            const parsedItem = this.parseMemoryItem(rawItem);
+            await this.db.addMemoryItem(
+              userId,
+              targetCategory,
+              parsedItem.key,
+              parsedItem.value,
+              parsedItem
+            );
           }
           
           return {
@@ -241,10 +295,12 @@ class EnhancedSmartActionProcessor {
             details: {
               targetCategory,
               originalRequest: target,
-              itemsStored: values.length,
-              aiDecision: true
+              itemsStored: memoryValues.length,
+              aiDecision: Boolean(matchedCategory),
+              createdCategory
             }
           };
+        }
           
         default:
           throw new Error(`Unknown add operation: ${operation}`);
@@ -396,30 +452,39 @@ async handleSmartDelete(data, userId) {
   
   switch(operation) {
     // ===== LIST OPERATIONS =====
-    case 'delete_item':
-      const listName = metadata.listName || target;
+    case 'delete_item': {
+      if (!metadata?.itemId) {
+        throw new Error('Missing list item ID for delete_item operation');
+      }
       
-      console.log(`🗑️ Deleting item ${metadata.itemId} from list "${listName}"`);
-      await this.db.deleteListItem(userId, listName, metadata.itemId);
+      const listName = metadata.listName || target;
+      const listId = metadata.listId;
+      
+      console.log(`🗑️ Deleting item ${metadata.itemId} from list "${listName}" (listId: ${listId || 'none'})`);
+      await this.db.deleteListItem(userId, listName, metadata.itemId, { listId });
       
       return { 
         success: true, 
         type: 'list_item_deleted', 
         details: { 
           listName, 
+          listId: listId || null,
           itemId: metadata.itemId 
         }
       };
+    }
 
-    case 'delete_list':
-      console.log(`🗑️ Deleting entire list "${target}"`);
-      await this.db.deleteUserList(userId, target);
+    case 'delete_list': {
+      const listId = metadata?.listId;
+      console.log(`🗑️ Deleting entire list "${target}" (listId: ${listId || 'none'})`);
+      await this.db.deleteUserList(userId, target, { listId });
       
       return { 
         success: true, 
         type: 'list_deleted', 
-        details: { listName: target }
+        details: { listName: target, listId: listId || null }
       };
+    }
 
     // ===== SCHEDULE OPERATIONS =====
     case 'delete_event':
@@ -771,9 +836,13 @@ async handleSmartDelete(data, userId) {
      * Parse event details with smart date parsing
      */
     parseEventDetails(eventString, metadata) {
+      const now = new Date();
+      const defaultStartTime = new Date(now);
+      defaultStartTime.setHours(now.getHours() + 1, 0, 0, 0); // Default to next hour
+
       const details = {
         title: eventString,
-        startTime: null,
+        startTime: defaultStartTime.toISOString(), // Set default start time
         endTime: null,
         description: '',
         location: ''
@@ -791,7 +860,22 @@ async handleSmartDelete(data, userId) {
      * Parse memory item into key-value pairs
      */
     parseMemoryItem(item) {
+      if (item && typeof item === 'object' && !Array.isArray(item)) {
+        const possibleKey = item.key || item.memoryKey || item.label || item.name;
+        const possibleValue = item.value || item.memoryValue || item.details || item.content;
+        const rawObject = JSON.stringify(item);
+        
+        if (possibleKey || possibleValue) {
+          return {
+            key: (possibleKey || '').toString().trim(),
+            value: (possibleValue || '').toString().trim(),
+            raw: rawObject
+          };
+        }
+      }
+      
       const itemStr = typeof item === 'string' ? item : JSON.stringify(item);
+      const trimmed = itemStr.trim();
       
       // Try to extract key-value patterns
       const patterns = [
@@ -806,15 +890,17 @@ async handleSmartDelete(data, userId) {
         if (match) {
           return {
             key: match[1].trim(),
-            value: match[2].trim()
+            value: match[2].trim(),
+            raw: trimmed
           };
         }
       }
       
       // If no pattern matches, use the whole item as key with empty value
       return {
-        key: itemStr,
-        value: ''
+        key: trimmed,
+        value: '',
+        raw: trimmed
       };
     }
   
