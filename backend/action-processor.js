@@ -850,7 +850,14 @@ async handleSmartDelete(data, userId) {
       
       // Use smart date parsing if available
       if (metadata?.smartDate) {
-        details.startTime = this.dateParser.parseToActualDate(metadata.smartDate);
+        const parsedSmartDate = this.dateParser.parseToActualDate(metadata.smartDate, {
+          referenceDate: now,
+          fallbackDate: defaultStartTime
+        });
+
+        if (parsedSmartDate) {
+          details.startTime = parsedSmartDate;
+        }
       }
       
       return details;
