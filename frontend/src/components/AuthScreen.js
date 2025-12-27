@@ -55,7 +55,7 @@ const AuthScreen = ({ onAuthSuccess }) => {
           const token = data.session.access_token;
           
           // Try to get existing account
-          const response = await fetch('http://localhost:3001/auth/account', {
+          const response = await fetch(appService.auth.account, {
             headers: {
               'Authorization': `Bearer ${token}`
             }
@@ -74,7 +74,7 @@ const AuthScreen = ({ onAuthSuccess }) => {
               // Create the account now
               console.log('🆕 Creating account for newly confirmed user');
               
-              const createResponse = await fetch('http://localhost:3001/auth/create-account', {
+              const createResponse = await fetch(appService.auth.createAccount, {
                 method: 'POST',
                 headers: {
                   'Content-Type': 'application/json',
@@ -116,7 +116,7 @@ const AuthScreen = ({ onAuthSuccess }) => {
         } else if (data.session) {
           // Email confirmation disabled - create account immediately
           const token = data.session.access_token;
-          const response = await fetch('http://localhost:3001/auth/create-account', {
+          const response = await fetch(appService.auth.createAccount, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
