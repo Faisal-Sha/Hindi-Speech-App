@@ -1,7 +1,7 @@
 
 class AppService {
     constructor() {
-      this.baseUrl = 'http://localhost:3001';
+      this.baseUrl = process.env.REACT_APP_API_URL;
     }
 
     get auth() {
