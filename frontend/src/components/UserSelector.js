@@ -1,22 +1,21 @@
-
 import React, { useState, useEffect } from 'react';
-import './UserSelector.css'; // We'll create this separate CSS file
+import './UserSelector.css';
 
-const UserSelector = ({ onUserSelect, currentUser }) => {
-  const [users, setUsers] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [showAddUser, setShowAddUser] = useState(false);
-  const [newUser, setNewUser] = useState({
-    userId: '',
+const UserSelector = ({ onUserSelect, currentUser, familyAccount, authToken }) => {
+  const [profiles, setProfiles] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [showAddProfile, setShowAddProfile] = useState(false);
+  const [error, setError] = useState('');
+  const [newProfile, setNewProfile] = useState({
     displayName: '',
     preferredLanguage: 'en-US',
     avatarEmoji: '👤'
   });
 
-  // Language options for user preference selection
+  // Language options
   const languageOptions = [
-    { code: 'hi-IN', name: 'हिंदी (Hindi)', flag: '🇮🇳' },
     { code: 'en-US', name: 'English', flag: '🇺🇸' },
+    { code: 'hi-IN', name: 'हिंदी (Hindi)', flag: '🇮🇳' },
     { code: 'es-ES', name: 'Español', flag: '🇪🇸' },
     { code: 'fr-FR', name: 'Français', flag: '🇫🇷' },
     { code: 'de-DE', name: 'Deutsch', flag: '🇩🇪' },
@@ -29,110 +28,130 @@ const UserSelector = ({ onUserSelect, currentUser }) => {
     '🧑‍🎨', '👨‍🔬', '👩‍🔬', '🦸‍♂️', '🦸‍♀️', '🧙‍♂️', '🧙‍♀️'
   ];
 
-  // Load existing users
+  // Load profiles from family account
   useEffect(() => {
-    loadUsers();
-  }, []);
+    loadProfiles();
+  }, [familyAccount]);
 
-  const loadUsers = async () => {
+  const loadProfiles = async () => {
     try {
       setLoading(true);
-      console.log('🔍 Loading user profiles...');
+      console.log('🔍 Loading profiles from family account...');
       
-      const response = await fetch('http://localhost:3001/users');
+      const response = await fetch('http://localhost:3001/auth/account', {
+        headers: {
+          'Authorization': `Bearer ${authToken}`
+        }
+      });
+
       if (response.ok) {
-        const usersData = await response.json();
-        console.log('✅ Loaded users:', usersData);
-        setUsers(usersData);
+        const data = await response.json();
+        console.log('✅ Loaded profiles:', data.account.profiles);
+        setProfiles(data.account.profiles || []);
       } else {
-        console.log('⚠️ No users found, will show add user form');
-        setUsers([]);
+        console.log('⚠️ Failed to load profiles');
+        setProfiles([]);
       }
     } catch (error) {
-      console.error('❌ Error loading users:', error);
-      setUsers([]);
+      console.error('❌ Error loading profiles:', error);
+      setProfiles([]);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleUserSelect = async (userId) => {
+  const handleProfileSelect = async (profile) => {
     try {
-      console.log(`👤 User selected: ${userId}`);
+      console.log(`👤 Profile selected: ${profile.user_id}`);
       
-      // Get full user profile
-      const response = await fetch(`http://localhost:3001/user-profile/${userId}`);
+      // Get full user profile with data counts
+      const response = await fetch(`http://localhost:3001/user-profile/${profile.user_id}`, {
+        headers: {
+          'Authorization': `Bearer ${authToken}`
+        }
+      });
+
       if (response.ok) {
         const userProfile = await response.json();
         console.log('✅ User profile loaded:', userProfile);
         onUserSelect(userProfile);
       } else {
         console.error('❌ Failed to load user profile');
+        // Fallback to the basic profile data
+        onUserSelect(profile);
       }
     } catch (error) {
-      console.error('❌ Error selecting user:', error);
+      console.error('❌ Error selecting profile:', error);
+      // Fallback to the basic profile data
+      onUserSelect(profile);
     }
   };
 
-  const handleAddUser = async () => {
-    // Validation
-    if (!newUser.userId.trim() || !newUser.displayName.trim()) {
-      alert('Please fill in both User ID and Display Name');
-      return;
-    }
-    
+  const handleCreateProfile = async () => {
     try {
-      console.log('➕ Creating new user:', newUser);
-      
-      const response = await fetch('http://localhost:3001/create-user', {
+      if (!newProfile.displayName.trim()) {
+        setError('Profile name is required');
+        return;
+      }
+
+      if (newProfile.displayName.trim().length < 2) {
+        setError('Profile name must be at least 2 characters');
+        return;
+      }
+
+      if (profiles.length >= (familyAccount?.maxProfiles || 5)) {
+        setError(`You can only have ${familyAccount?.maxProfiles || 5} profiles per account`);
+        return;
+      }
+
+      setLoading(true);
+      setError('');
+
+      console.log('⏱️ Creating new profile:', newProfile);
+
+      const response = await fetch('http://localhost:3001/auth/profiles', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newUser)
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
+        },
+        body: JSON.stringify({
+          displayName: newProfile.displayName.trim(),
+          preferredLanguage: newProfile.preferredLanguage,
+          avatarEmoji: newProfile.avatarEmoji
+        })
       });
 
       if (response.ok) {
-        const createdUser = await response.json();
-        console.log('✅ User created:', createdUser);
+        const data = await response.json();
+        console.log('✅ Profile created successfully:', data.profile);
         
-        // Reload users and select the new one
-        await loadUsers();
-        setShowAddUser(false);
-        setNewUser({ userId: '', displayName: '', preferredLanguage: 'en-US', avatarEmoji: '👤' });
+        // Reload profiles
+        await loadProfiles();
         
-        // Auto-select the new user
-        handleUserSelect(createdUser.user_id);
+        // Reset form and close modal
+        setShowAddProfile(false);
+        setNewProfile({
+          displayName: '',
+          preferredLanguage: 'en-US',
+          avatarEmoji: '👤'
+        });
+        
+        // Auto-select the new profile
+        handleProfileSelect(data.profile);
       } else {
         const errorData = await response.json();
-        alert(`Error creating user: ${errorData.error}`);
+        setError(errorData.message || 'Failed to create profile');
       }
     } catch (error) {
-      console.error('❌ Error creating user:', error);
-      alert('Failed to create user. Please try again.');
+      console.error('❌ Error creating profile:', error);
+      setError('Network error. Please try again.');
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleDeleteUser = async (userId, displayName) => {
-    if (window.confirm(`Are you sure you want to delete ${displayName}? This will permanently delete all their data.`)) {
-      try {
-        const response = await fetch(`http://localhost:3001/delete-user/${userId}`, {
-          method: 'DELETE'
-        });
-
-        if (response.ok) {
-          console.log(`✅ User ${userId} deleted`);
-          loadUsers(); // Reload the user list
-        } else {
-          const errorData = await response.json();
-          alert(`Error deleting user: ${errorData.error}`);
-        }
-      } catch (error) {
-        console.error('❌ Error deleting user:', error);
-        alert('Failed to delete user. Please try again.');
-      }
-    }
-  };
-
-  if (loading) {
+  if (loading && profiles.length === 0) {
     return (
       <div className="user-selector-container">
         <div className="loading-screen">
@@ -149,104 +168,73 @@ const UserSelector = ({ onUserSelect, currentUser }) => {
         
         {/* Header */}
         <div className="user-selector-header">
-          <h1 className="main-title">🤖 Personal AI Assistant</h1>
-          <p className="tagline">Who's using the assistant today?</p>
+          <h1 className="main-title">👨‍👩‍👧‍👦 Choose Profile</h1>
+          <p className="tagline">Select a family member to continue</p>
+          {familyAccount && (
+            <p className="family-name">Welcome to {familyAccount.accountName}</p>
+          )}
         </div>
 
-        {/* User Profiles Grid */}
-        {users.length > 0 && (
+        {/* Profiles Grid */}
+        {profiles.length > 0 && (
           <div className="users-grid">
-            {users.map((user) => (
+            {profiles.map((profile) => (
               <div
-                key={user.user_id}
+                key={profile.user_id}
                 className="user-card"
-                onClick={() => handleUserSelect(user.user_id)}
+                onClick={() => handleProfileSelect(profile)}
               >
-                {/* Delete button */}
-                <button
-                  className="delete-user-btn"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleDeleteUser(user.user_id, user.display_name);
-                  }}
-                >
-                  ×
-                </button>
-
                 {/* Avatar */}
                 <div className="user-avatar-section">
-                  <div className="user-avatar-large">{user.avatar_emoji}</div>
-                  <h3 className="user-display-name">{user.display_name}</h3>
+                  <div className="user-avatar-large">{profile.avatar_emoji || '👤'}</div>
+                  <h3 className="user-display-name">{profile.display_name}</h3>
                   <div className="user-language-info">
                     <span className="language-flag">
-                      {languageOptions.find(lang => lang.code === user.preferred_language)?.flag || '🌐'}
+                      {languageOptions.find(lang => lang.code === profile.preferred_language)?.flag || '🌐'}
                     </span>
                     <span className="language-name">
-                      {languageOptions.find(lang => lang.code === user.preferred_language)?.name.split('(')[0].trim() || user.preferred_language}
+                      {languageOptions.find(lang => lang.code === profile.preferred_language)?.name.split('(')[0].trim() || profile.preferred_language}
                     </span>
-                  </div>
-                </div>
-
-                {/* User Stats */}
-                <div className="user-stats">
-                  <div className="stat-item">
-                    📝 {user.lists_count || user.data_summary?.lists_count || 0} Lists
-                  </div>
-                  <div className="stat-item">
-                    📅 {user.schedules_count || user.data_summary?.schedules_count || 0} Schedules
-                  </div>
-                  <div className="stat-item">
-                    🧠 {user.memory_count || user.data_summary?.memory_count || 0} Memory Items
                   </div>
                 </div>
 
                 {/* Last Active */}
                 <div className="last-active">
-                  Last active: {user.last_active ? new Date(user.last_active).toLocaleDateString() : 'Never'}
+                  Last active: {profile.last_active ? new Date(profile.last_active).toLocaleDateString() : 'Never'}
                 </div>
               </div>
             ))}
           </div>
         )}
 
-        {/* Add New User Button */}
-        <div className="add-user-section">
-          <button
-            onClick={() => setShowAddUser(true)}
-            className="add-user-btn"
-          >
-            ➕ Add New User
-          </button>
-        </div>
+        {/* Add New Profile Button */}
+        {profiles.length < (familyAccount?.maxProfiles || 5) && (
+          <div className="add-user-section">
+            <button
+              onClick={() => setShowAddProfile(true)}
+              className="add-user-btn"
+            >
+              ➕ Add New Profile
+            </button>
+          </div>
+        )}
 
-        {/* Add User Modal */}
-        {showAddUser && (
+        {/* Add Profile Modal */}
+        {showAddProfile && (
           <div className="modal-overlay">
             <div className="modal-content">
-              <h3 className="modal-title">Create New User</h3>
+              <h3 className="modal-title">Create New Profile</h3>
               
               <div className="form-container">
-                {/* User ID */}
-                <div className="form-field">
-                  <label className="form-label">User ID (unique identifier)</label>
-                  <input
-                    type="text"
-                    value={newUser.userId}
-                    onChange={(e) => setNewUser({...newUser, userId: e.target.value})}
-                    className="form-input"
-                    placeholder="e.g., john_doe"
-                  />
-                </div>
-
                 {/* Display Name */}
                 <div className="form-field">
-                  <label className="form-label">Display Name</label>
+                  <label className="form-label">Profile Name</label>
                   <input
                     type="text"
-                    value={newUser.displayName}
-                    onChange={(e) => setNewUser({...newUser, displayName: e.target.value})}
+                    value={newProfile.displayName}
+                    onChange={(e) => setNewProfile({...newProfile, displayName: e.target.value})}
                     className="form-input"
-                    placeholder="e.g., John Doe"
+                    placeholder="e.g., John, Mom, Dad"
                   />
                 </div>
 
@@ -254,8 +242,8 @@ const UserSelector = ({ onUserSelect, currentUser }) => {
                 <div className="form-field">
                   <label className="form-label">Preferred Language</label>
                   <select
-                    value={newUser.preferredLanguage}
-                    onChange={(e) => setNewUser({...newUser, preferredLanguage: e.target.value})}
+                    value={newProfile.preferredLanguage}
+                    onChange={(e) => setNewProfile({...newProfile, preferredLanguage: e.target.value})}
                     className="form-select"
                   >
                     {languageOptions.map(lang => (
@@ -273,8 +261,9 @@ const UserSelector = ({ onUserSelect, currentUser }) => {
                     {avatarOptions.map((emoji) => (
                       <button
                         key={emoji}
-                        onClick={() => setNewUser({...newUser, avatarEmoji: emoji})}
-                        className={`avatar-option ${newUser.avatarEmoji === emoji ? 'selected' : ''}`}
+                        type="button"
+                        onClick={() => setNewProfile({...newProfile, avatarEmoji: emoji})}
+                        className={`avatar-option ${newProfile.avatarEmoji === emoji ? 'selected' : ''}`}
                       >
                         {emoji}
                       </button>
@@ -282,12 +271,32 @@ const UserSelector = ({ onUserSelect, currentUser }) => {
                   </div>
                 </div>
 
+                {error && (
+                  <div className="error-message">⚠️ {error}</div>
+                )}
+
                 {/* Buttons */}
                 <div className="form-buttons">
-                  <button onClick={handleAddUser} className="btn-primary">
-                    Create User
+                  <button 
+                    onClick={handleCreateProfile} 
+                    className="btn-primary"
+                    disabled={loading || !newProfile.displayName.trim()}
+                  >
+                    {loading ? '⏳ Creating...' : 'Create Profile'}
                   </button>
-                  <button onClick={() => setShowAddUser(false)} className="btn-secondary">
+                  <button 
+                    onClick={() => {
+                      setShowAddProfile(false);
+                      setError('');
+                      setNewProfile({
+                        displayName: '',
+                        preferredLanguage: 'en-US',
+                        avatarEmoji: '👤'
+                      });
+                    }} 
+                    className="btn-secondary"
+                    disabled={loading}
+                  >
                     Cancel
                   </button>
                 </div>
@@ -296,14 +305,17 @@ const UserSelector = ({ onUserSelect, currentUser }) => {
           </div>
         )}
 
-        {/* No Users State */}
-        {users.length === 0 && !showAddUser && (
+        {/* No Profiles State */}
+        {profiles.length === 0 && !showAddProfile && !loading && (
           <div className="no-users-state">
             <div className="welcome-emoji">👋</div>
-            <h3 className="welcome-title">Welcome! Let's create your first user profile.</h3>
+            <h3 className="welcome-title">Welcome, {familyAccount?.accountName}!</h3>
             <p className="welcome-description">
-              Each user will have their own lists, schedules, memory, and language preferences.
+              Let's create your first family profile. Each profile will have its own lists, schedules, memory, and language preferences.
             </p>
+            <button onClick={() => setShowAddProfile(true)} className="add-user-btn primary">
+              ➕ Create First Profile
+            </button>
           </div>
         )}
       </div>

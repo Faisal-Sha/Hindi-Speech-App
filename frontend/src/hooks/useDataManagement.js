@@ -1,17 +1,58 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import appService from '../services/AppService';
 
-const useDataManagement = (messages = []) => { // Default empty array to prevent undefined errors
+const useDataManagement = (messages, authToken) => { // Default empty array to prevent undefined errors
   // State for different data types
   const [userLists, setUserLists] = useState({});
   const [userSchedules, setUserSchedules] = useState({});
   const [userMemory, setUserMemory] = useState({});
   const [userChats, setUserChats] = useState({});
   const [isLoading, setIsLoading] = useState(false);
-
+  const [currentUserId, setCurrentUserId] = useState(null);
+  
   // Load user data from backend on startup
   useEffect(() => {
     loadUserData();
   }, []);
+
+  // =====================================
+  // AUTHENTICATED FETCH HELPER
+  // =====================================
+  
+  const authenticatedFetch = async (url, options = {}, authToken) => {
+    try {
+      const headers = {
+        'Content-Type': 'application/json',
+        ...(authToken && { 'Authorization': `Bearer ${authToken}` }),
+        ...options.headers
+      };
+      
+      const response = await fetch(url, {
+        ...options,
+        headers
+      });
+      
+      // Handle authentication errors
+      if (response.status === 401) {
+        throw new Error('Authentication required - please login again');
+      }
+      
+      if (response.status === 403) {
+        throw new Error('Access denied - you can only access your own family\'s data');
+      }
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `HTTP ${response.status}: ${response.statusText}`);
+      }
+      
+      return response;
+      
+    } catch (error) {
+      console.error('❌ Authenticated fetch error:', error);
+      throw error;
+    }
+  };
 
   const findBestMatchingItem = (targetName, existingItems, itemType = 'item') => {
     if (!targetName || !existingItems) return null;
@@ -146,12 +187,26 @@ const useDataManagement = (messages = []) => { // Default empty array to prevent
   };
   
   // Load user data function
-  const loadUserData = async (userId = 'default') => {
+  const loadUserData = useCallback(async (userId) => {
+    console.log(`📥 Loading data for user: ${userId}`);
+    setIsLoading(true);
+    setCurrentUserId(userId);
+
     try {
-      setIsLoading(true);
-      console.log(`📖 Loading user data for: ${userId}`);
+      console.log('🌐 Fetching data from backend using /data endpoint...');
       
-      const response = await fetch(`http://localhost:3001/data/${userId}`);
+      // Use the correct endpoint that exists in your backend
+      const response = await fetch(appService.user.data(userId), {
+        headers: {
+          'Authorization': `Bearer ${authToken}`
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+     
       
       if (response.ok) {
         const userData = await response.json();
@@ -170,7 +225,7 @@ const useDataManagement = (messages = []) => { // Default empty array to prevent
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [authToken]);
 
   // Handle AI actions
   const handleAiActions = async (actions, userId = 'default') => {
@@ -955,7 +1010,9 @@ const useDataManagement = (messages = []) => { // Default empty array to prevent
     userChats,
     handleAiActions,
     isLoading,
-    loadUserData
+    loadUserData, 
+    authenticatedFetch: (url, options = {}, authToken) => 
+      authenticatedFetch(url, options, authToken), 
   };
 };
 

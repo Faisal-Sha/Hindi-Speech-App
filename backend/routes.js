@@ -28,7 +28,10 @@ const {
   deleteMemoryItem, 
   deleteMemoryCategory,
   getAllUserData, 
-  buildSmartContext
+  buildSmartContext, 
+  createFamilyAccount,
+  getFamilyAccountWithProfiles,
+  createProfileInAccount
 } = require('./database');
 
 const router = express.Router();
@@ -37,6 +40,427 @@ const router = express.Router();
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
+
+const { 
+  authenticateAccount,
+  authorizeProfileAccess,
+  authRateLimit,
+  apiRateLimit,
+  validateAuthRequest,
+  securityHeaders
+} = require('./middleware/familyAuth');
+
+const {
+  validatePassword,
+  validateAccountName
+} = require('./utils/familyAuth');
+const { supabase } = require('./supabaseClient');
+
+
+// =============================================
+// FAMILY ACCOUNT AUTHENTICATION ROUTES
+// =============================================
+
+/**
+ * POST /auth/create-account - Create a new family account after Supabase signup
+ */
+router.post('/auth/create-account',
+  authRateLimit,
+  validateAuthRequest(['accountName']),
+  async (req, res) => {
+    try {
+      const authHeader = req.headers['authorization'];
+      const token = authHeader && authHeader.split(' ')[1];
+
+      if (!token) {
+        return res.status(401).json({
+          error: 'Unauthorized',
+          message: 'Authentication token required'
+        });
+      }
+
+      // Verify the Supabase token
+      const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+      
+      if (authError || !user) {
+        return res.status(401).json({
+          error: 'Unauthorized',
+          message: 'Invalid authentication token'
+        });
+      }
+
+      const { accountName } = req.body;
+
+      // Check if account already exists
+      const existingAccount = await getFamilyAccountWithProfiles(user.email);
+      if (existingAccount) {
+        return res.status(409).json({
+          error: 'Account exists',
+          message: 'An account with this email already exists'
+        });
+      }
+
+      // Create the family account in our database (password handled by Supabase)
+      const account = await createFamilyAccount(user.email, accountName);
+
+      res.status(201).json({
+        account: {
+          email: account.email,
+          accountName: account.account_name,
+          maxProfiles: account.max_profiles,
+          profileCount: 0,
+          profiles: []
+        }
+      });
+    } catch (error) {
+      console.error('❌ Account creation error:', error);
+      res.status(500).json({
+        error: 'Account creation failed',
+        message: 'Unable to create account'
+      });
+    }
+  }
+);
+
+/**
+ * POST /auth/login - Authenticate family account
+ * This is where families log into their account
+ */
+router.post('/auth/login',
+  authRateLimit,
+  validateAuthRequest(['email', 'password']),
+  async (req, res) => {
+    try {
+      const { email, password } = req.body;
+      
+      console.log(`🔐 Login attempt for: ${email}`);
+
+      // Authenticate with Supabase
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password
+      });
+
+      if (error) {
+        console.error('❌ Supabase login failed:', error.message);
+        return res.status(401).json({
+          error: 'Login failed',
+          message: 'Invalid email or password'
+        });
+      }
+
+      if (!data.session) {
+        return res.status(401).json({
+          error: 'Login failed',
+          message: 'No session created'
+        });
+      }
+
+      const token = data.session.access_token;
+
+      // Get account info from database
+      const accountWithProfiles = await getFamilyAccountWithProfiles(email);
+      
+      if (!accountWithProfiles) {
+        return res.status(404).json({
+          error: 'Account not found',
+          message: 'No account exists for this email. Please sign up first.'
+        });
+      }
+
+      console.log(`✅ Login successful: ${accountWithProfiles.accountName}`);
+
+      res.json({
+        message: 'Login successful',
+        token,
+        account: {
+          email: accountWithProfiles.email,
+          accountName: accountWithProfiles.accountName,
+          maxProfiles: accountWithProfiles.maxProfiles,
+          profileCount: accountWithProfiles.profileCount,
+          profiles: accountWithProfiles.profiles
+        }
+      });
+
+    } catch (error) {
+      console.error('❌ Login error:', error);
+      res.status(500).json({
+        error: 'Login failed',
+        message: 'An error occurred during login'
+      });
+    }
+  }
+);
+
+/**
+ * POST /auth/logout - Logout from family account
+ */
+router.post('/auth/logout',
+  authenticateAccount,
+  async (req, res) => {
+    try {
+      console.log(`🚪 Logout request for: ${req.account.email}`);
+
+      // Get token from header
+      const authHeader = req.headers['authorization'];
+      const token = authHeader && authHeader.split(' ')[1];
+
+      if (token) {
+        // Sign out from Supabase
+        const { error } = await supabase.auth.signOut();
+        if (error) {
+          console.error('❌ Supabase logout error:', error);
+        }
+      }
+
+      console.log(`✅ Logout successful: ${req.account.email}`);
+
+      res.json({
+        message: 'Logout successful'
+      });
+
+    } catch (error) {
+      console.error('❌ Logout error:', error);
+      res.status(500).json({
+        error: 'Logout failed',
+        message: 'An error occurred during logout'
+      });
+    }
+  }
+);
+
+/**
+ * POST /auth/forgot-password - Request password reset
+ */
+router.post('/auth/forgot-password',
+  authRateLimit,
+  validateAuthRequest(['email']),
+  async (req, res) => {
+    try {
+      const { email } = req.body;
+      
+      console.log(`🔑 Password reset request for: ${email}`);
+
+      // Send password reset email via Supabase
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/reset-password`
+      });
+
+      if (error) {
+        console.error('❌ Password reset error:', error);
+        // Don't reveal if email exists or not for security
+        return res.json({
+          message: 'If an account exists with this email, a password reset link has been sent.'
+        });
+      }
+
+      console.log(`✅ Password reset email sent to: ${email}`);
+
+      res.json({
+        message: 'If an account exists with this email, a password reset link has been sent.'
+      });
+
+    } catch (error) {
+      console.error('❌ Password reset error:', error);
+      res.status(500).json({
+        error: 'Password reset failed',
+        message: 'An error occurred while processing your request'
+      });
+    }
+  }
+);
+
+/**
+ * POST /auth/reset-password - Reset password with token
+ */
+router.post('/auth/reset-password',
+  authRateLimit,
+  validateAuthRequest(['password']),
+  async (req, res) => {
+    try {
+      const { password } = req.body;
+      
+      // Get token from Authorization header
+      const authHeader = req.headers['authorization'];
+      const token = authHeader && authHeader.split(' ')[1];
+
+      if (!token) {
+        return res.status(401).json({
+          error: 'Token required',
+          message: 'Password reset token is required'
+        });
+      }
+
+      console.log(`🔑 Password reset attempt with token`);
+
+      // Validate password strength
+      const passwordValidation = validatePassword(password);
+      if (!passwordValidation.isValid) {
+        return res.status(400).json({
+          error: 'Weak password',
+          message: 'Password does not meet security requirements',
+          requirements: passwordValidation.errors
+        });
+      }
+
+      // Update password in Supabase
+      const { error } = await supabase.auth.updateUser({
+        password: password
+      });
+
+      if (error) {
+        console.error('❌ Password update error:', error);
+        return res.status(400).json({
+          error: 'Password reset failed',
+          message: error.message
+        });
+      }
+
+      console.log(`✅ Password reset successful`);
+
+      res.json({
+        message: 'Password has been reset successfully'
+      });
+
+    } catch (error) {
+      console.error('❌ Password reset error:', error);
+      res.status(500).json({
+        error: 'Password reset failed',
+        message: 'An error occurred while resetting your password'
+      });
+    }
+  }
+);
+
+/**
+ * GET /auth/account - Get current account info with profiles
+ * This is called when the app loads to check if user is still logged in
+ */
+router.get('/auth/account', 
+  authenticateAccount,
+  async (req, res) => {
+    try {
+      console.log(`📋 Getting account info for: ${req.account.email}`);
+      
+      // Get fresh account data with profiles
+      const accountWithProfiles = await getFamilyAccountWithProfiles(req.account.email);
+      
+      if (!accountWithProfiles) {
+        return res.status(404).json({
+          error: 'Account not found',
+          message: 'Account no longer exists'
+        });
+      }
+      
+      res.json({
+        account: {
+          email: accountWithProfiles.email,
+          accountName: accountWithProfiles.accountName,
+          maxProfiles: accountWithProfiles.maxProfiles,
+          profileCount: accountWithProfiles.profileCount,
+          profiles: accountWithProfiles.profiles
+        }
+      });
+      
+    } catch (error) {
+      console.error('❌ Error getting account info:', error);
+      res.status(500).json({
+        error: 'Failed to get account info',
+        message: 'Unable to retrieve account information'
+      });
+    }
+  }
+);
+
+
+// =============================================
+// PROFILE MANAGEMENT ROUTES (WITHIN ACCOUNT)
+// =============================================
+
+/**
+ * POST /auth/profiles - Create a new profile in the family account
+ * This is your existing "Add New User" functionality, but now protected
+ */
+router.post('/auth/profiles',
+  authenticateAccount,
+  validateAuthRequest(['displayName']),
+  async (req, res) => {
+    try {
+      console.log(`👤 Creating new profile for account: ${req.account.email}`);
+      
+      const { displayName, preferredLanguage, avatarEmoji } = req.body;
+      
+      // Validate display name
+      if (!displayName || displayName.trim().length < 2) {
+        return res.status(400).json({
+          error: 'Invalid display name',
+          message: 'Display name must be at least 2 characters long'
+        });
+      }
+      
+      // Create profile in the account
+      const profile = await createProfileInAccount(req.account.email, displayName, {
+        preferredLanguage: preferredLanguage || 'en-US',
+        avatarEmoji: avatarEmoji || '👤'
+      });
+      
+      console.log(`✅ Profile created: ${displayName} (${profile.user_id})`);
+      
+      res.status(201).json({
+        message: 'Profile created successfully',
+        profile
+      });
+      
+    } catch (error) {
+      console.error('❌ Error creating profile:', error);
+      
+      if (error.message.includes('Maximum number of profiles')) {
+        return res.status(403).json({
+          error: 'Profile limit reached',
+          message: `You can only have ${req.account.maxProfiles} profiles per account`
+        });
+      }
+      
+      if (error.message.includes('already exists')) {
+        return res.status(409).json({
+          error: 'Profile exists',
+          message: 'A profile with this name already exists'
+        });
+      }
+      
+      res.status(500).json({
+        error: 'Failed to create profile',
+        message: 'Unable to create profile. Please try again.'
+      });
+    }
+  }
+);
+
+/**
+ * GET /auth/profiles - Get all profiles in the family account
+ * Alternative way to get profiles (the main way is through GET /auth/account)
+ */
+router.get('/auth/profiles',
+  authenticateAccount,
+  async (req, res) => {
+    try {
+      const accountWithProfiles = await getFamilyAccountWithProfiles(req.account.email);
+      
+      res.json({
+        profiles: accountWithProfiles.profiles || [],
+        profileCount: accountWithProfiles.profileCount,
+        maxProfiles: accountWithProfiles.maxProfiles
+      });
+      
+    } catch (error) {
+      console.error('❌ Error getting profiles:', error);
+      res.status(500).json({
+        error: 'Failed to get profiles',
+        message: 'Unable to retrieve profiles'
+      });
+    }
+  }
+);
 
 
 //AI SYSTEM PROMPT
@@ -1161,10 +1585,19 @@ router.get('/users', async (req, res) => {
   }
 });
 
-router.get('/user-profile/:userId', async (req, res) => {
+router.get('/user-profile/:userId', authenticateAccount, authorizeProfileAccess, async (req, res) => {
     try {
       const { userId } = req.params;
       console.log(`👤 Getting profile for user: ${userId}`);
+
+      // Users can only access their own profile (or admins can access any - you can implement admin logic later)
+      const profileBelongsToAccount = req.account.profiles.some(profile => profile.user_id === userId);
+      if (!profileBelongsToAccount) {
+        return res.status(403).json({ 
+          error: 'Access denied',
+          message: 'You can only access your own profile'
+        });
+      }
       
       const userProfile = await getUserProfile(userId);
       
@@ -1180,149 +1613,160 @@ router.get('/user-profile/:userId', async (req, res) => {
     }
 });
 
-router.post('/create-user', async (req, res) => {
-    try {
-      const { userId, displayName, preferredLanguage, avatarEmoji } = req.body;
-      
-      console.log(`➕ Creating new user: ${userId} (${displayName})`);
-      
-      // Validation
-      if (!userId || !displayName) {
-        return res.status(400).json({ error: 'User ID and Display Name are required' });
-      }
-      
-      // Check if user already exists
-      const existingUser = await getUserProfile(userId);
-      if (existingUser) {
-        return res.status(409).json({ error: 'User already exists' });
-      }
-      
-      // Create user with profile
-      await ensureUserWithProfile(userId, {
-        displayName,
-        preferredLanguage: preferredLanguage || 'en-US',
-        avatarEmoji: avatarEmoji || '👤',
-        themePreference: 'default'
-      });
-      
-      // Return the created user profile
-      const newUserProfile = await getUserProfile(userId);
-      
-      console.log(`✅ User created successfully: ${userId}`);
-      res.status(201).json(newUserProfile);
-    } catch (error) {
-      console.error('❌ Error creating user:', error);
-      
-      if (error.code === '23505') { // Unique violation
-        res.status(409).json({ error: 'User already exists' });
-      } else {
-        res.status(500).json({ error: 'Failed to create user' });
-      }
+router.post('/create-user', authenticateAccount, async (req, res) => {
+  try {
+    const { userId, displayName, preferredLanguage, avatarEmoji } = req.body;
+    
+    console.log(`➕ Creating new user: ${userId} (${displayName})`);
+    
+    // Validation
+    if (!userId || !displayName) {
+      return res.status(400).json({ error: 'User ID and Display Name are required' });
     }
+    
+    // Check if user already exists
+    const existingUser = await getUserProfile(userId);
+    if (existingUser) {
+      return res.status(409).json({ error: 'User already exists' });
+    }
+    
+    // Create user with profile
+    await ensureUserWithProfile(userId, {
+      displayName,
+      preferredLanguage: preferredLanguage || 'en-US',
+      avatarEmoji: avatarEmoji || '👤',
+      themePreference: 'default'
+    });
+    
+    // Return the created user profile
+    const newUserProfile = await getUserProfile(userId);
+    
+    console.log(`✅ User created successfully: ${userId}`);
+    res.status(201).json(newUserProfile);
+  } catch (error) {
+    console.error('❌ Error creating user:', error);
+    
+    if (error.code === '23505') { // Unique violation
+      res.status(409).json({ error: 'User already exists' });
+    } else {
+      res.status(500).json({ error: 'Failed to create user' });
+    }
+  }
 });
 
 router.post('/login', async (req, res) => {
-    try {
-      const { userId } = req.body;
-      
-      if (!userId) {
-        return res.status(400).json({ error: 'User ID is required' });
-      }
-      
-      const userProfile = await getUserProfile(userId);
-      
-      if (!userProfile) {
-        return res.status(404).json({ error: 'User not found' });
-      }
-      
-      // Update last active
-      await pool.query(
-        'UPDATE users SET last_active = CURRENT_TIMESTAMP WHERE user_id = $1',
-        [userId]
-      );
-      
-      console.log(`🔐 User logged in: ${userId} (${userProfile.display_name})`);
-      
-      res.json({
-        message: 'Login successful',
-        user: userProfile
-      });
-    } catch (error) {
-      console.error('❌ Error during login:', error);
-      res.status(500).json({ error: 'Login failed' });
+  try {
+    const { userId } = req.body;
+    
+    if (!userId) {
+      return res.status(400).json({ error: 'User ID is required' });
     }
+    
+    const userProfile = await getUserProfile(userId);
+    
+    if (!userProfile) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    // Update last active
+    await pool.query(
+      'UPDATE users SET last_active = CURRENT_TIMESTAMP WHERE user_id = $1',
+      [userId]
+    );
+    
+    console.log(`🔐 User logged in: ${userId} (${userProfile.display_name})`);
+    
+    res.json({
+      message: 'Login successful',
+      user: userProfile
+    });
+  } catch (error) {
+    console.error('❌ Error during login:', error);
+    res.status(500).json({ error: 'Login failed' });
+  }
 });
 
-router.put('/update-user/:userId', async (req, res) => {
-    try {
-      const { userId } = req.params;
-      const { displayName, preferredLanguage, avatarEmoji, themePreference } = req.body;
-      
-      console.log(`📝 Updating user profile: ${userId}`);
-      
-      // Update user profile
-      await pool.query(`
-        UPDATE user_profiles 
-        SET 
-          display_name = COALESCE($2, display_name),
-          preferred_language = COALESCE($3, preferred_language),
-          avatar_emoji = COALESCE($4, avatar_emoji),
-          theme_preference = COALESCE($5, theme_preference),
-          updated_at = CURRENT_TIMESTAMP
-        WHERE user_id = $1
-      `, [userId, displayName, preferredLanguage, avatarEmoji, themePreference]);
-      
-      // Also update last_active in users table
-      await pool.query(
-        'UPDATE users SET last_active = CURRENT_TIMESTAMP WHERE user_id = $1',
-        [userId]
-      );
-      
-      const updatedProfile = await getUserProfile(userId);
-      
-      console.log(`✅ User profile updated: ${userId}`);
-      res.json(updatedProfile);
-    } catch (error) {
-      console.error('❌ Error updating user profile:', error);
-      res.status(500).json({ error: 'Failed to update user profile' });
-    }
+router.put('/update-user/:userId', authenticateAccount, authorizeProfileAccess, async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { displayName, preferredLanguage, avatarEmoji, themePreference } = req.body;
+    
+    console.log(`📝 Updating user profile: ${userId}`);
+    
+    // Update user profile
+    await pool.query(`
+      UPDATE user_profiles 
+      SET 
+        display_name = COALESCE($2, display_name),
+        preferred_language = COALESCE($3, preferred_language),
+        avatar_emoji = COALESCE($4, avatar_emoji),
+        theme_preference = COALESCE($5, theme_preference),
+        updated_at = CURRENT_TIMESTAMP
+      WHERE user_id = $1
+    `, [userId, displayName, preferredLanguage, avatarEmoji, themePreference]);
+    
+    // Also update last_active in users table
+    await pool.query(
+      'UPDATE users SET last_active = CURRENT_TIMESTAMP WHERE user_id = $1',
+      [userId]
+    );
+    
+    const updatedProfile = await getUserProfile(userId);
+    
+    console.log(`✅ User profile updated: ${userId}`);
+    res.json(updatedProfile);
+  } catch (error) {
+    console.error('❌ Error updating user profile:', error);
+    res.status(500).json({ error: 'Failed to update user profile' });
+  }
 });
 
-//❌Need to fix
-router.delete('/delete-user/:userId', async (req, res) => {
+router.delete('/delete-user/:userId',
+  authenticateAccount,
+  authorizeProfileAccess,
+  async (req, res) => {
     try {
       const { userId } = req.params;
       
-      console.log(`🗑️ Deleting user and all data: ${userId}`);
+      console.log(`🗑️ Deleting profile: ${userId} from account: ${req.account.email}`);
       
       // Start transaction to ensure all data is deleted atomically
       await pool.query('BEGIN');
       
       try {
         // Delete in order to respect foreign key constraints
+        await pool.query('DELETE FROM list_items WHERE list_id IN (SELECT id FROM user_lists WHERE user_id = $1)', [userId]);
+        await pool.query('DELETE FROM user_lists WHERE user_id = $1', [userId]);
+        await pool.query('DELETE FROM schedule_events WHERE schedule_id IN (SELECT id FROM user_schedules WHERE user_id = $1)', [userId]);
+        await pool.query('DELETE FROM user_schedules WHERE user_id = $1', [userId]);
+        await pool.query('DELETE FROM memory_items WHERE category_id IN (SELECT id FROM memory_categories WHERE user_id = $1)', [userId]);
+        await pool.query('DELETE FROM memory_categories WHERE user_id = $1', [userId]);
         await pool.query('DELETE FROM conversations WHERE user_id = $1', [userId]);
         await pool.query('DELETE FROM user_data WHERE user_id = $1', [userId]);
-        await pool.query('DELETE FROM user_sessions WHERE user_id = $1', [userId]);
         await pool.query('DELETE FROM user_profiles WHERE user_id = $1', [userId]);
         await pool.query('DELETE FROM users WHERE user_id = $1', [userId]);
         
+        // Commit transaction
         await pool.query('COMMIT');
         
-        console.log(`✅ User ${userId} and all data deleted successfully`);
-        res.json({ message: 'User deleted successfully' });
+        console.log(`✅ Profile deleted successfully: ${userId}`);
+        res.json({ message: 'Profile deleted successfully', userId });
+        
       } catch (error) {
         await pool.query('ROLLBACK');
         throw error;
       }
+      
     } catch (error) {
-      console.error('❌ Error deleting user:', error);
-      res.status(500).json({ error: 'Failed to delete user' });
+      console.error('❌ Error deleting profile:', error);
+      res.status(500).json({ error: 'Failed to delete profile' });
     }
-});
+  }
+);
 
 /* Getting all the data */
 
-router.get('/data/:userId', async (req, res) => {
+router.get('/data/:userId', authenticateAccount, async (req, res) => {
   try {
     const { userId } = req.params;
     

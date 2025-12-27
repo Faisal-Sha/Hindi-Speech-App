@@ -4,11 +4,22 @@ import './App.css';
 // Import your existing components
 import Header from './components/Header';
 import UserSelector from './components/UserSelector';
+import AuthScreen from './components/AuthScreen';
 import ContentDisplay from './components/ContentDisplay';
 import useDataManagement from './hooks/useDataManagement';
+import { supabase } from './services/supabaseClient';
 import useSpeechRecognition from './hooks/useSpeechRecognition';
+import appService from './services/AppService';
 
 function App() {
+
+  // =====================================
+  // AUTHENTICATION STATE
+  // =====================================
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [authToken, setAuthToken] = useState(null);
+  const [familyAccount, setFamilyAccount] = useState(null);
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
 
   const [currentUser, setCurrentUser] = useState(null);
   const [isSelectingUser, setIsSelectingUser] = useState(true);
@@ -30,7 +41,7 @@ function App() {
     handleAiActions,
     isLoading: isDataLoading,
     loadUserData
-  } = useDataManagement(messages);
+  } = useDataManagement(messages, authToken);
 
   const {
     isRecording: isListening,     
@@ -93,6 +104,105 @@ function App() {
     setIsSelectingUser(true);
     setMessages([]);
   };
+
+  // =====================================
+  // AUTHENTICATION FUNCTIONS
+  // =====================================
+  
+  // Check if user is already logged in when app loads
+  useEffect(() => {
+    checkExistingAuth();
+  }, []);
+
+  const checkExistingAuth = async () => {
+    try {
+      console.log('🔍 Checking for existing authentication...');
+
+      const { data: { session } } = await supabase.auth.getSession();
+
+      if (!session) {
+        console.log('❌ No active session');
+        setIsCheckingAuth(false);
+        return;
+      }
+
+      const token = session.access_token;
+
+      // Verify token with backend
+      const response = await fetch(appService.auth.account, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log('✅ Existing authentication valid:', data.account);
+
+        // Restore authentication state
+        setAuthToken(token);
+        setFamilyAccount(data.account);
+        setIsAuthenticated(true);
+
+        // If they only have one profile, auto-select it
+        if (data.account.profiles && data.account.profiles.length === 1) {
+          handleUserSelect(data.account.profiles[0]);
+        }
+
+      } else {
+        console.log('❌ Session token is invalid');
+      }
+
+    } catch (error) {
+      console.error('❌ Error checking authentication:', error);
+    } finally {
+      setIsCheckingAuth(false);
+    }
+  };
+
+  // Handle successful authentication (login or signup)
+  const handleAuthSuccess = (account, token) => {
+    console.log('✅ Authentication successful:', account);
+
+    setAuthToken(token);
+    setFamilyAccount(account);
+    setIsAuthenticated(true);
+    
+    // If they only have one profile, auto-select it
+    if (account.profiles && account.profiles.length === 1) {
+      handleUserSelect(account.profiles[0]);
+    } else {
+      setIsSelectingUser(true);
+    }
+  };
+
+  // Handle logout
+  const handleLogout = async () => {
+    try {
+      console.log('🚪 Logging out...');
+      // Sign out of Supabase
+      await supabase.auth.signOut();
+
+      // Clear local state
+      setAuthToken(null);
+      setFamilyAccount(null);
+      setIsAuthenticated(false);
+      setCurrentUser(null);
+      setIsSelectingUser(true);
+      setMessages([]);
+
+      console.log('✅ Logged out successfully');
+
+    } catch (error) {
+      console.error('❌ Error during logout:', error);
+      setAuthToken(null);
+      setFamilyAccount(null);
+      setIsAuthenticated(false);
+      setCurrentUser(null);
+      setIsSelectingUser(true);
+    }
+  };
+
 
   // =====================================
   // LIST ITEM INTERACTION HANDLERS
@@ -284,6 +394,83 @@ const handleDeleteMemory = async (action) => {
  * Update local state for list items
  * This mimics the update_list logic from useDataManagement
  */
+
+  // =====================================
+  // UPDATED DATA MANAGEMENT WITH AUTH
+  // =====================================
+  
+  // Update your existing data management functions to include auth token
+  const authenticatedFetch = async (url, options = {}) => {
+    const headers = {
+      'Content-Type': 'application/json',
+      ...(authToken && { 'Authorization': `Bearer ${authToken}` }),
+      ...options.headers
+    };
+    
+    const response = await fetch(url, {
+      ...options,
+      headers
+    });
+    
+    // Handle authentication errors
+    if (response.status === 401 || response.status === 403) {
+      console.error('❌ Authentication error, logging out');
+      handleLogout();
+      throw new Error('Authentication failed');
+    }
+    
+    return response;
+  };
+
+  // =====================================
+  // LOADING STATE
+  // =====================================
+  
+  if (isCheckingAuth) {
+    return (
+      <div className="loading-screen">
+        <div className="loading-container">
+          <div className="loading-spinner">⏳</div>
+          <h2>Loading Family Assistant...</h2>
+          <p>Checking your authentication status</p>
+        </div>
+      </div>
+    );
+  }
+
+  // =====================================
+  // RENDER AUTHENTICATION FLOW
+  // =====================================
+  
+  // Show authentication screen if not logged in
+  if (!isAuthenticated) {
+    return <AuthScreen onAuthSuccess={handleAuthSuccess} />;
+  }
+
+  // Show profile selector if logged in but no profile selected
+  if (isSelectingUser) {
+    return (
+      <div className="app">
+        <Header 
+          language={currentLanguage}
+          onLanguageChange={() => {}}
+          currentMode={currentMode}
+          onModeChange={setCurrentMode}
+          currentUser={null}  // No user selected yet
+          onSwitchUser={handleSwitchUser}
+          familyAccount={familyAccount}  // ADD THIS
+          onLogout={handleLogout}  // ADD THIS
+          showModeNavigation={false}  // ADD THIS - hide mode buttons on profile page
+        />
+        <UserSelector 
+          onUserSelect={handleUserSelect}
+          currentUser={currentUser}
+          familyAccount={familyAccount}
+          authToken={authToken}
+        />
+      </div>
+    );
+  }
 
   
   const sendMessage = async (messageText) => {
@@ -483,7 +670,7 @@ const handleDeleteMemory = async (action) => {
   
   // Show user selection if no user is selected
   if (isSelectingUser) {
-    return <UserSelector onUserSelect={handleUserSelect} currentUser={currentUser} />;
+    return <UserSelector onUserSelect={handleUserSelect} currentUser={currentUser} familyAccount={familyAccount} authToken={authToken}/>;
   }
 
   // Main app interface
@@ -492,11 +679,14 @@ const handleDeleteMemory = async (action) => {
       {/* Enhanced Header with User Info */}
       <Header 
         language={currentLanguage}
-        onLanguageChange={() => {}} // Language is now controlled by user profile
+        onLanguageChange={() => {}}
         currentMode={currentMode}
         onModeChange={setCurrentMode}
         currentUser={currentUser}
         onSwitchUser={handleSwitchUser}
+        familyAccount={familyAccount}  // ADD THIS
+        onLogout={handleLogout}  // ADD THIS
+        showModeNavigation={true}  // ADD THIS
       />
 
       {/* User Info Bar */}
@@ -551,13 +741,7 @@ const handleDeleteMemory = async (action) => {
       />
 
 
-      {/* Live Speech Display */}
-      {isListening && accumulatedText && (
-        <div className="live-speech">
-          <strong>🎤 Live Speech Recognition:</strong>
-          <div className="speech-text">{accumulatedText}</div>
-        </div>
-      )}
+      
 
       {/* Messages Container */}
       <div className="content-container">
@@ -596,6 +780,15 @@ const handleDeleteMemory = async (action) => {
           </div>
         )}
       </div>
+
+
+        {/* Live Speech Display */}
+      {isListening && accumulatedText && (
+        <div className="live-speech">
+          <strong>🎤 Live Speech Recognition:</strong>
+          <div className="speech-text">{accumulatedText}</div>
+        </div>
+      )}
 
       {/* Input Section */}
       <div className="input-section">

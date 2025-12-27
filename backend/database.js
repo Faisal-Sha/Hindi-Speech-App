@@ -1,13 +1,218 @@
-const { Pool } = require('pg');
+const { pool } = require('./config/db');
+/*const { Pool } = require('pg');*/
 
-const pool = new Pool({
+/*const pool = new Pool({
     user: process.env.DB_USER || 'postgres',
     host: process.env.DB_HOST || 'localhost',
     database: process.env.DB_NAME || 'personal_assistant',
     password: process.env.DB_PASSWORD || 'password',
     port: process.env.DB_PORT || 5432,
   });
+*/
+  const {
+    generateProfileId
+  } = require('./utils/familyAuth');
 
+  // =============================================
+// FAMILY ACCOUNT FUNCTIONS
+// =============================================
+
+/**
+ * Create a new family account (Supabase handles authentication)
+ * This is like creating a "family login" that can have multiple profiles
+ * @param {string} email - Account email (from Supabase)
+ * @param {string} accountName - Family/household name (e.g., "Smith Family")
+ * @returns {object} - Created account info
+ */
+async function createFamilyAccount(email, accountName) {
+  try {
+    console.log(`👨‍👩‍👧‍👦 Creating family account: ${accountName} (${email})`);
+    
+    // Create the account (password is handled by Supabase)
+    const result = await pool.query(`
+      INSERT INTO accounts (email, account_name, created_at)
+      VALUES ($1, $2, CURRENT_TIMESTAMP)
+      RETURNING account_id as id, email, account_name, created_at, max_profiles
+    `, [email, accountName]);
+    
+    const account = result.rows[0];
+    console.log(`✅ Family account created successfully: ${accountName} (ID: ${account.id})`);
+    
+    return account;
+    
+  } catch (error) {
+    console.error('❌ Error creating family account:', error);
+    
+    // Handle specific database errors
+    if (error.code === '23505') { // Unique violation
+      throw new Error('An account with this email already exists');
+    }
+    
+    throw new Error('Failed to create family account');
+  }
+}
+
+/**
+ * DEPRECATED: Authentication is now handled by Supabase
+ * This function is kept for backward compatibility but should not be used
+ */
+async function authenticateFamilyAccount(email, password) {
+  console.warn('⚠️ authenticateFamilyAccount is deprecated - use Supabase auth instead');
+  throw new Error('Authentication is handled by Supabase. Use Supabase auth endpoints.');
+}
+
+/**
+ * Get family account with all its profiles
+ * This is what we call after successful login to show the profile selector
+ * @param {string} email - Account email
+ * @returns {object} - Account with profiles array
+ */
+async function getFamilyAccountWithProfiles(email) {
+  try {
+    console.log(`👨‍👩‍👧‍👦 Getting family account with profiles: ${email}`);
+    
+    // Use our view to get account with profiles
+    const result = await pool.query(`
+      SELECT * FROM account_with_profiles WHERE email = $1
+    `, [email]);
+    
+    if (result.rows.length === 0) {
+      console.log(`❌ Family account not found: ${email}`);
+      return null;
+    }
+    
+    const account = result.rows[0];
+    console.log(`✅ Found family account: ${account.account_name} with ${account.profile_count} profiles`);
+    
+    return {
+      id: account.id,
+      email: account.email,
+      accountName: account.account_name,
+      profileCount: account.profile_count,
+      maxProfiles: account.max_profiles,
+      profiles: account.profiles || [],
+      createdAt: account.created_at,
+      lastLogin: account.last_login
+    };
+    
+  } catch (error) {
+    console.error('❌ Error getting family account with profiles:', error);
+    return null;
+  }
+}
+
+/**
+ * Create a new profile within a family account
+ * This is what happens when someone clicks "Add New Profile"
+ * @param {string} accountEmail - Account email (to link the profile)
+ * @param {string} displayName - Profile display name (e.g., "Dad", "Mom", "Kids")
+ * @param {object} profileData - Additional profile data
+ * @returns {object} - Created profile
+ */
+async function createProfileInAccount(accountEmail, displayName, profileData = {}) {
+  try {
+    console.log(`👤 Creating profile "${displayName}" in account: ${accountEmail}`);
+    
+    // Check if account can add more profiles
+    const canAdd = await pool.query(`
+      SELECT can_add_profile($1) as can_add
+    `, [accountEmail]);
+    
+    if (!canAdd.rows[0].can_add) {
+      throw new Error('Maximum number of profiles reached for this account');
+    }
+    
+    // Generate a unique profile ID
+    const profileId = generateProfileId(displayName, accountEmail);
+    
+    // Start transaction to create both user and profile records
+    await pool.query('BEGIN');
+    
+    try {
+      // Create user record linked to account
+      await pool.query(`
+        INSERT INTO users (user_id, account_email, created_at, last_active)
+        VALUES ($1, $2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      `, [profileId, accountEmail]);
+      
+      // Create user profile record with display data
+      const { 
+        preferredLanguage = 'en-US',
+        avatarEmoji = '👤',
+        themePreference = 'default'
+      } = profileData;
+      
+      await pool.query(`
+        INSERT INTO user_profiles (user_id, display_name, preferred_language, avatar_emoji, theme_preference)
+        VALUES ($1, $2, $3, $4, $5)
+      `, [profileId, displayName, preferredLanguage, avatarEmoji, themePreference]);
+      
+      // Commit transaction
+      await pool.query('COMMIT');
+      
+      console.log(`✅ Profile created successfully: ${displayName} (${profileId})`);
+      
+      // Return the full profile
+      return await getUserProfile(profileId);
+      
+    } catch (error) {
+      await pool.query('ROLLBACK');
+      throw error;
+    }
+    
+  } catch (error) {
+    console.error('❌ Error creating profile in account:', error);
+    
+    if (error.code === '23505') { // Unique violation
+      throw new Error('A profile with this name already exists');
+    }
+    
+    throw error;
+  }
+}
+
+/**
+ * DEPRECATED: Session management is now handled by Supabase
+ * These functions are kept for backward compatibility but should not be used
+ */
+async function createAccountSession(accountEmail, token, sessionData = {}) {
+  console.warn('⚠️ createAccountSession is deprecated - Supabase handles sessions');
+  throw new Error('Session management is handled by Supabase');
+}
+
+async function verifyAccountSession(token) {
+  console.warn('⚠️ verifyAccountSession is deprecated - Supabase handles sessions');
+  throw new Error('Session management is handled by Supabase');
+}
+
+async function deleteAccountSession(accountEmail, token) {
+  console.warn('⚠️ deleteAccountSession is deprecated - Supabase handles sessions');
+  throw new Error('Session management is handled by Supabase');
+}
+
+/**
+ * Check if a profile belongs to an account (authorization)
+ * This ensures users can only access their own family's profiles
+ * @param {string} accountEmail - Account email
+ * @param {string} profileId - Profile/user ID
+ * @returns {boolean} - True if profile belongs to account
+ */
+async function profileBelongsToAccount(accountEmail, profileId) {
+  try {
+    const result = await pool.query(`
+      SELECT 1 FROM users 
+      WHERE user_id = $1 AND account_email = $2
+    `, [profileId, accountEmail]);
+    
+    const belongs = result.rows.length > 0;
+    console.log(`🔍 Profile ${profileId} belongs to ${accountEmail}: ${belongs}`);
+    return belongs;
+    
+  } catch (error) {
+    console.error('❌ Error checking profile ownership:', error);
+    return false;
+  }
+}
 /* User Authetication */
 async function ensureUser(userId) {
     try {
@@ -1598,6 +1803,14 @@ async function buildSmartContext(userId, mode, currentData, message) {
 
 module.exports = {
     pool,
+    createFamilyAccount,
+    authenticateFamilyAccount,
+    getFamilyAccountWithProfiles,
+    createProfileInAccount,
+    createAccountSession,
+    verifyAccountSession,
+    deleteAccountSession,
+    profileBelongsToAccount,
     ensureUser,
     ensureUserWithProfile,
     getUserProfile,

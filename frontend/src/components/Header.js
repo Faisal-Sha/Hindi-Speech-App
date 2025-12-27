@@ -1,4 +1,5 @@
 import React from 'react';
+import './Header.css';
 
 const Header = ({ 
   language, 
@@ -6,7 +7,10 @@ const Header = ({
   currentMode, 
   onModeChange, 
   currentUser, 
-  onSwitchUser 
+  onSwitchUser,
+  familyAccount,
+  onLogout,
+  showModeNavigation = true
 }) => {
   
   const languageOptions = [
@@ -27,7 +31,7 @@ const Header = ({
   // Get current language display info
   const currentLanguageInfo = languageOptions.find(lang => lang.code === language) || languageOptions[1];
 
-  // Get title and subtitle based on user's language
+  // Get title text based on user's language
   const getTitleText = () => {
     const titles = {
       'en-US': {
@@ -64,35 +68,59 @@ const Header = ({
 
   return (
     <div className="header-section">
-      <div className="header-title">
-        <h1>{titleText.main}</h1>
-        <h2>{titleText.subtitle}</h2>
-        <p>{titleText.tagline}</p>
-        
-        {/* User Language Display (Read-only) */}
+      <div className="header-top-bar">
+        {/* Left: App Title */}
+        <div className="header-title">
+          <h1>{titleText.main}</h1>
+          {familyAccount && (
+            <p className="family-account-name">👨‍👩‍👧‍👦 {familyAccount.accountName}</p>
+          )}
+        </div>
+
+        {/* Right: User Info and Logout */}
+        <div className="header-actions">
+          {currentUser && (
+            <div className="current-user-display">
+              <span className="user-avatar">{currentUser.avatar_emoji || '👤'}</span>
+              <span className="user-name">{currentUser.display_name}</span>
+              <button onClick={onSwitchUser} className="switch-user-btn">
+                🔄 Switch
+              </button>
+            </div>
+          )}
+          
+          {onLogout && (
+            <button onClick={onLogout} className="logout-btn">
+              🚪 Logout
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Language Display (if user is selected) */}
+      {currentUser && (
         <div className="language-display">
           <div className="current-language-info">
             <span className="language-flag">{currentLanguageInfo.flag}</span>
             <span className="language-name">{currentLanguageInfo.name}</span>
-            <small className="language-note">
-              (Set in user profile - switch users to change language)
-            </small>
           </div>
         </div>
-      </div>
+      )}
       
-      {/* Mode Navigation */}
-      <div className="mode-navigation">
-        {modes.map(({mode, icon, label}) => (
-          <button
-            key={mode}
-            onClick={() => onModeChange(mode)}
-            className={`mode-button ${currentMode === mode ? 'active' : ''}`}
-          >
-            {icon} {label}
-          </button>
-        ))}
-      </div>
+      {/* Mode Navigation (only show when user is selected) */}
+      {showModeNavigation && currentUser && (
+        <div className="mode-navigation">
+          {modes.map(({mode, icon, label}) => (
+            <button
+              key={mode}
+              onClick={() => onModeChange(mode)}
+              className={`mode-button ${currentMode === mode ? 'active' : ''}`}
+            >
+              {icon} {label}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 };

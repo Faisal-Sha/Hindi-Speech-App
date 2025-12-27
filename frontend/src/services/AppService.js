@@ -3,6 +3,36 @@ class AppService {
     constructor() {
       this.baseUrl = 'http://localhost:3001';
     }
+
+    get auth() {
+      return {
+        account: `${this.baseUrl}/auth/account`,
+        createAccount: `${this.baseUrl}/auth/create-account`,
+        profiles: `${this.baseUrl}/auth/profiles`,
+        forgotPassword: `${this.baseUrl}/auth/forgot-password`
+      };
+    }
+
+    // User endpoints
+    get user() {
+      return {
+        profile: (userId) => `${this.baseUrl}/user-profile/${userId}`,
+        data: (userId) => `${this.baseUrl}/data/${userId}`
+      };
+    }
+
+    // Chat endpoint
+    get chat() {
+      return `${this.baseUrl}/chat`;
+    }
+
+    // Data endpoints
+    get data() {
+      return {
+        saveEnhanced: `${this.baseUrl}/save-data-enhanced`,
+        translate: `${this.baseUrl}/translate`
+      };
+    }
   
     async sendMessageToAI(message, mode, context, language, userId = 'default') {
       try {
