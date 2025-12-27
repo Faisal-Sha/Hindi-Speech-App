@@ -11,9 +11,9 @@ const useDataManagement = (messages, authToken) => { // Default empty array to p
   const [currentUserId, setCurrentUserId] = useState(null);
   
   // Load user data from backend on startup
-  useEffect(() => {
+  /*useEffect(() => {
     loadUserData();
-  }, []);
+  }, []); */
 
   // =====================================
   // AUTHENTICATED FETCH HELPER

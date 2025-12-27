@@ -12,9 +12,14 @@ const port = process.env.PORT || 3001;
 // MIDDLEWARE SETUP
 // =============================================
 
-// CORS configuration
+const allowedOrigins = [
+  'http://localhost:3000',
+  'https://personal-ai-assistant-l3d6.onrender.com',
+  process.env.FRONTEND_URL
+].filter(Boolean);
+
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+  origin: allowedOrigins,
   credentials: true
 }));
 
