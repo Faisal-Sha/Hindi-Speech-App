@@ -1,0 +1,26 @@
+# Development stage
+FROM node:20-alpine
+
+# Set working directory
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+
+# Install dependencies
+RUN npm install
+
+# Copy source code
+COPY . .
+
+# Expose port 3000 (default for Create React App)
+EXPOSE 3000
+
+# Set environment variables with defaults
+ENV CHOKIDAR_USEPOLLING=true
+ENV WDS_SOCKET_PORT=0
+ENV PORT=3000
+ENV REACT_APP_API_URL=http://localhost:3001
+
+# Start development server with better defaults for Docker
+CMD ["npm", "start"]
