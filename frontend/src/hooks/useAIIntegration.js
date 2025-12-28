@@ -6,7 +6,7 @@ const useAIIntegration = (accumulatedText, userResponse, currentMode, language) 
   const [error, setError] = useState(null);
 
   // Backend API base URL
-  const API_BASE = 'http://localhost:3001';
+  const API_BASE = process.env.REACT_APP_API_URL;
   const userId = 'default'; // In a real app, this would come from authentication
 
   // Text-to-speech function

@@ -1,3 +1,5 @@
+import appService from '../services/AppService';
+
 const translateText = async (text, targetLanguage) => {
     // Simple language mapping
     const languageMap = {
@@ -16,7 +18,7 @@ const translateText = async (text, targetLanguage) => {
     }
   
     try {
-      const response = await fetch('http://localhost:3001/translate', {
+      const response = await fetch(appService.data.translate, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

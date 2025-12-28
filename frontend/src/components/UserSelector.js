@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import './UserSelector.css';
+import appService from '../services/AppService';
 
 const UserSelector = ({ onUserSelect, currentUser, familyAccount, authToken }) => {
   const [profiles, setProfiles] = useState([]);
@@ -38,7 +39,7 @@ const UserSelector = ({ onUserSelect, currentUser, familyAccount, authToken }) =
       setLoading(true);
       console.log('🔍 Loading profiles from family account...');
       
-      const response = await fetch('http://localhost:3001/auth/account', {
+      const response = await fetch(appService.auth.account, {
         headers: {
           'Authorization': `Bearer ${authToken}`
         }
@@ -65,7 +66,7 @@ const UserSelector = ({ onUserSelect, currentUser, familyAccount, authToken }) =
       console.log(`👤 Profile selected: ${profile.user_id}`);
       
       // Get full user profile with data counts
-      const response = await fetch(`http://localhost:3001/user-profile/${profile.user_id}`, {
+      const response = await fetch(appService.user.profile(profile.user_id), {
         headers: {
           'Authorization': `Bearer ${authToken}`
         }
@@ -109,7 +110,7 @@ const UserSelector = ({ onUserSelect, currentUser, familyAccount, authToken }) =
 
       console.log('⏱️ Creating new profile:', newProfile);
 
-      const response = await fetch('http://localhost:3001/auth/profiles', {
+      const response = await fetch(appService.auth.profiles, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -313,9 +314,6 @@ const UserSelector = ({ onUserSelect, currentUser, familyAccount, authToken }) =
             <p className="welcome-description">
               Let's create your first family profile. Each profile will have its own lists, schedules, memory, and language preferences.
             </p>
-            <button onClick={() => setShowAddProfile(true)} className="add-user-btn primary">
-              ➕ Create First Profile
-            </button>
           </div>
         )}
       </div>

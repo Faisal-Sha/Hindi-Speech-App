@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import './App.css';
+import appService from './services/AppService';
 
 // Import your existing components
 import Header from './components/Header';
@@ -508,7 +509,7 @@ const handleDeleteMemory = async (action) => {
       };
 
       // Send to backend with user context
-      const response = await fetch('http://localhost:3001/chat', {
+      const response = await fetch(appService.chat, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -596,7 +597,7 @@ const handleDeleteMemory = async (action) => {
       });
 
       
-      const response = await fetch('http://localhost:3001/save-data-enhanced', {
+      const response = await fetch(appService.data.saveEnhanced, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
