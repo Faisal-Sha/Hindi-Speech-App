@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import './App.css';
-import appService from './services/AppService';
+
 
 // Import your existing components
 import Header from './components/Header';
